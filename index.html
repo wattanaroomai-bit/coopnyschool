@@ -34,17 +34,25 @@
             .print-only { display: block !important; }
             @page { 
                 size: A4 portrait; 
-                margin: 15mm; 
-                @bottom-right {
-                    content: "หน้า " counter(page) " จาก " counter(pages);
-                    font-size: 10px;
-                    font-family: sans-serif;
-                }
+                margin: 15mm 15mm 20mm 15mm; 
             }
-            body { background-color: white; margin: 0; padding: 0; }
+            body { background-color: white; margin: 0; padding: 0; font-size: 12pt; color: black; }
+            
+            /* เทคนิคบังคับ Header/Footer ให้แสดงทุกหน้า */
+            table.report-container { width: 100%; }
+            thead.report-header { display: table-header-group; }
+            tfoot.report-footer { display: table-footer-group; }
+            
+            /* ป้องกันการตัดหน้ากระดาษกลางบรรทัด */
+            tr, .avoid-break { page-break-inside: avoid; }
+            
             .print-table { width: 100%; border-collapse: collapse; }
-            .print-table th, .print-table td { border: 1px solid #e5e7eb; padding: 8px; }
-            .print-no-border th, .print-no-border td { border: none !important; padding: 0; }
+            .print-table th, .print-table td { border: 1px solid #94a3b8; padding: 6px; }
+            .print-no-border th, .print-no-border td { border: none !important; padding: 2px; }
+            
+            /* ซ่อนเงาและสีพื้นหลังที่ไม่จำเป็นตอนพิมพ์ */
+            .shadow-sm, .shadow-md, .shadow-lg, .shadow-2xl { box-shadow: none !important; }
+            .bg-gray-50, .bg-blue-50, .bg-green-50, .bg-purple-50, .bg-red-50, .bg-orange-50 { background-color: white !important; border: 1px solid #ccc !important; }
         }
     </style>
 </head>
@@ -52,7 +60,7 @@
     <div id="root"></div>
 
     <script type="text/babel">
-        const { useState, useEffect } = React;
+        const { useState, useEffect, useMemo } = React;
 
         // ==============================================================
         const GAS_URL = "https://script.google.com/macros/s/AKfycbycN-KzUymkFAryompd3_FH8LAUY978FAKWbyk6ogP0ieSheSbRNjnhTg142tbJkdobqQ/exec";
@@ -97,24 +105,40 @@
         const ArrowsClockwise = (p) => <Icon name="arrows-clockwise" {...p} />;
         const CheckSquare = (p) => <Icon name="check-square" {...p} />;
         const Square = (p) => <Icon name="square" {...p} />;
+        const Calendar = (p) => <Icon name="calendar-blank" {...p} />;
+        const Coin = (p) => <Icon name="coins" {...p} />;
 
         const getGradeWeight = (grade) => {
             const weights = { 'อนุบาล 2': 1, 'อนุบาล 3': 2, 'ป.1': 3, 'ป.2': 4, 'ป.3': 5, 'ป.4': 6, 'ป.5': 7, 'ป.6': 8, 'ครู': 99 };
             return weights[String(grade)] || 100;
         };
 
-        // --- Error Boundary เพื่อป้องกันหน้าจอขาว ---
+        // --- Helper สำหรับแปลงวันที่ไทยเป็น Date Object ---
+        const parseThaiDate = (dateString) => {
+            if (!dateString) return new Date();
+            try {
+                // รูปแบบ "25/12/2566 14:30:00"
+                const parts = dateString.split(' ');
+                const dateParts = parts[0].split('/');
+                const timeParts = parts[1] ? parts[1].split(':') : ['00', '00', '00'];
+                const day = parseInt(dateParts[0], 10);
+                const month = parseInt(dateParts[1], 10) - 1;
+                let year = parseInt(dateParts[2], 10);
+                if (year > 2400) year -= 543; // แปลง พ.ศ. เป็น ค.ศ.
+                return new Date(year, month, day, timeParts[0], timeParts[1], timeParts[2]);
+            } catch (e) {
+                return new Date(dateString); // Fallback
+            }
+        };
+
+        // --- Error Boundary ---
         class ErrorBoundary extends React.Component {
             constructor(props) {
                 super(props);
                 this.state = { hasError: false, error: null };
             }
-            static getDerivedStateFromError(error) {
-                return { hasError: true, error };
-            }
-            componentDidCatch(error, errorInfo) {
-                console.error("ระบบตรวจพบข้อผิดพลาด:", error, errorInfo);
-            }
+            static getDerivedStateFromError(error) { return { hasError: true, error }; }
+            componentDidCatch(error, errorInfo) { console.error("ระบบตรวจพบข้อผิดพลาด:", error, errorInfo); }
             render() {
                 if (this.state.hasError) {
                     return (
@@ -122,13 +146,8 @@
                             <div className="bg-red-50 text-red-600 p-8 rounded-2xl border border-red-200 shadow-sm max-w-lg">
                                 <AlertCircle size={64} className="mx-auto mb-4 opacity-50" />
                                 <h2 className="text-2xl font-bold mb-2">อ๊ะ! เกิดข้อผิดพลาดบางอย่าง</h2>
-                                <p className="mb-4 text-sm text-red-500 bg-white p-3 rounded border border-red-100 overflow-auto max-h-32">
-                                    {this.state.error && this.state.error.toString()}
-                                </p>
-                                <p className="mb-6 text-sm text-gray-600">โปรดรีเฟรชหน้าจอเพื่อเริ่มต้นการทำงานใหม่</p>
-                                <button onClick={() => window.location.reload()} className="bg-red-600 text-white px-6 py-3 rounded-xl font-bold hover:bg-red-700 transition shadow-md">
-                                    รีเฟรชหน้าจอ
-                                </button>
+                                <p className="mb-4 text-sm text-red-500 bg-white p-3 rounded border border-red-100 overflow-auto max-h-32">{this.state.error && this.state.error.toString()}</p>
+                                <button onClick={() => window.location.reload()} className="bg-red-600 text-white px-6 py-3 rounded-xl font-bold hover:bg-red-700 transition shadow-md">รีเฟรชหน้าจอ</button>
                             </div>
                         </div>
                     );
@@ -149,7 +168,7 @@
             const [members, setMembers] = useState([]);
             const [sales, setSales] = useState([]);
             const [expenses, setExpenses] = useState([]);
-            const [settings, setSettings] = useState({ dividendRate: 5, refundRate: 2, sharePrice: 10, coopName: "สหกรณ์โรงเรียนบ้านนกยูง(อสพป.30)", coopLogo: "" });
+            const [settings, setSettings] = useState({ dividendRate: 5, refundRate: 2, sharePrice: 10, coopName: "สหกรณ์โรงเรียน", coopLogo: "" });
             const [logs, setLogs] = useState([]);
 
             // Auth State
@@ -192,7 +211,6 @@
                     }
                 } catch (error) {
                     console.error("Error fetching data:", error);
-                    alert("ไม่สามารถเชื่อมต่อฐานข้อมูล Google Sheets ได้ กรุณาตรวจสอบการตั้งค่า GAS_URL");
                 } finally {
                     setIsInitializing(false);
                 }
@@ -206,9 +224,7 @@
                         headers: { "Content-Type": "text/plain" },
                         body: JSON.stringify({ action, payload })
                     }).catch((e) => console.error("Sync Error Background:", e));
-                } catch (e) {
-                    console.error("Sync Error:", e);
-                }
+                } catch (e) { console.error("Sync Error:", e); }
             };
 
             const addLog = (action, details) => {
@@ -242,26 +258,16 @@
                 setIsSidebarOpen(false);
             };
 
-            const handlePosLoginSubmit = (e) => {
-                e.preventDefault();
-                handlePosLogin(posLoginId);
-            };
-
+            const handlePosLoginSubmit = (e) => { e.preventDefault(); handlePosLogin(posLoginId); };
             const handlePosLogin = (id) => {
                 const member = members.find(m => String(m.id) === String(id));
                 if (member) {
                     setPosCashier(member);
                     setPosLoginId('');
                     addLog('เข้าสู่ระบบ POS', `เข้ากะโดย: ${member.name}`);
-                } else {
-                    alert('ไม่พบรหัสสมาชิกนี้ในระบบ');
-                }
+                } else { alert('ไม่พบรหัสสมาชิกนี้ในระบบ'); }
             };
-
-            const handlePosLogout = () => {
-                addLog('ออกจากระบบ POS', `ปิดกะโดย: ${posCashier.name}`);
-                setPosCashier(null);
-            };
+            const handlePosLogout = () => { addLog('ออกจากระบบ POS', `ปิดกะโดย: ${posCashier.name}`); setPosCashier(null); };
 
             const handleBarcodeSubmit = (e) => {
                 e.preventDefault();
@@ -291,12 +297,7 @@
                 const newSale = {
                     id: 'INV' + Date.now().toString().slice(-6),
                     date: new Date().toLocaleString('th-TH'),
-                    items: [...cart],
-                    total: cartTotal,
-                    cash: cash,
-                    change: change,
-                    seller: sellerName,
-                    memberId: posMemberId
+                    items: [...cart], total: cartTotal, cash: cash, change: change, seller: sellerName, memberId: posMemberId
                 };
 
                 const updatedProducts = products.map(p => {
@@ -326,9 +327,7 @@
                 if (posMemberId) syncToCloud("SYNC_MEMBERS", updatedMembers);
 
                 addLog('ทำรายการขาย', `บิล ${newSale.id} ยอด ฿${cartTotal} (ผู้ซื้อ: ${memberName})`);
-                setCart([]);
-                setCashGiven('');
-                setPosMemberId('');
+                setCart([]); setCashGiven(''); setPosMemberId('');
             };
 
             if (isInitializing) {
@@ -336,7 +335,6 @@
                 <div className="h-screen flex flex-col items-center justify-center bg-gray-50 relative print-hidden">
                     <Loader2 className="animate-spin text-green-600 mb-4" size={48} />
                     <h2 className="text-xl font-bold text-gray-800">กำลังเชื่อมต่อฐานข้อมูล...</h2>
-                    <p className="text-gray-500 text-sm mt-2">โปรดรอสักครู่ ระบบกำลังโหลดข้อมูลจาก Google Sheets</p>
                     <div className="absolute bottom-4 text-xs text-gray-400 font-medium">พัฒนาระบบ โดย ครูวัฒนา รู้ใหม่</div>
                 </div>
                 );
@@ -353,9 +351,7 @@
                             <Shield size={64} className="text-gray-300 mb-4" />
                             <h2 className="text-2xl font-bold mb-2">จำกัดสิทธิ์การเข้าถึง</h2>
                             <p className="mb-4">กรุณาลงชื่อเข้าใช้ (แอดมิน/ผู้จัดการ) เพื่อจัดการระบบหลังบ้าน</p>
-                            <button onClick={() => setShowLoginModal(true)} className="bg-green-600 text-white px-6 py-2 rounded-lg font-medium hover:bg-green-700 transition">
-                                เข้าสู่ระบบจัดการ
-                            </button>
+                            <button onClick={() => setShowLoginModal(true)} className="bg-green-600 text-white px-6 py-2 rounded-lg font-medium hover:bg-green-700 transition">เข้าสู่ระบบจัดการ</button>
                         </div>
                     );
                 }
@@ -371,7 +367,6 @@
                                         <Wallet size={16} /> สำหรับสมาชิก: ตรวจสอบยอด
                                         </button>
                                     </div>
-
                                     <div className="bg-white p-8 rounded-2xl shadow-sm border border-gray-100 w-96 max-w-full text-center relative overflow-hidden">
                                         <div className="absolute top-0 left-0 w-full h-2 bg-blue-500"></div>
                                         <div className="w-24 h-24 bg-blue-50 text-blue-600 rounded-full flex items-center justify-center mx-auto mb-4 border-4 border-white shadow-sm overflow-hidden">
@@ -379,12 +374,10 @@
                                         </div>
                                         <h2 className="text-2xl font-bold text-gray-800 mb-1">{settings.coopName || "จุดขายสินค้า (POS)"}</h2>
                                         <p className="text-gray-500 text-sm mb-6">กรุณากรอก <span className="font-bold text-blue-600">รหัสสมาชิก</span> เพื่อเข้ากะทำงาน</p>
-                                        
                                         <form onSubmit={handlePosLoginSubmit} className="space-y-4">
                                             <input type="text" value={posLoginId} onChange={(e) => setPosLoginId(e.target.value)} placeholder="รหัสสมาชิก นร. / ครู" className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none text-center text-lg font-bold tracking-wider" autoFocus />
                                             <button type="submit" disabled={!posLoginId} className="w-full bg-blue-600 text-white font-bold py-3 rounded-lg hover:bg-blue-700 transition shadow-sm disabled:bg-gray-300">เข้าสู่ระบบจุดขาย</button>
                                         </form>
-                                        
                                         <div className="mt-6 pt-4 border-t border-gray-100">
                                             <button onClick={() => setMemberModalTarget('login')} className="text-blue-600 text-sm font-medium hover:underline flex items-center justify-center gap-1 mx-auto bg-blue-50 px-4 py-2 rounded-lg transition hover:bg-blue-100"><Search size={16}/> ค้นหารายชื่อสมาชิก (ลืมรหัส)</button>
                                         </div>
@@ -571,9 +564,6 @@
                             <div><label className="block text-sm font-medium text-gray-700 mb-1">รหัสผ่าน</label><input type="password" value={loginForm.password} onChange={(e) => setLoginForm({...loginForm, password: e.target.value})} className="w-full px-4 py-3 rounded-lg border border-gray-300 focus:ring-2 focus:ring-green-500 outline-none" required/></div>
                             <button type="submit" className="w-full bg-green-600 text-white font-bold py-3 rounded-lg hover:bg-green-700 transition shadow-md flex justify-center items-center gap-2"><LogIn size={20} /> ยืนยัน</button>
                             </form>
-                            <div className="mt-6 text-center text-xs text-gray-400">
-                            พัฒนาระบบโดย ครูวัฒนา รู้ใหม่
-                            </div>
                         </div>
                         </div>
                     )}
@@ -634,7 +624,7 @@
                             <div className="p-6 overflow-y-auto" id="receipt-content">
                             <div className="text-center mb-4">
                                 <div className="w-12 h-12 bg-white text-green-600 border border-gray-200 rounded-full flex items-center justify-center mx-auto mb-2 font-bold text-xl overflow-hidden shadow-sm">
-                                {settings.coopLogo ? <img src={settings.coopLogo} className="w-full h-full object-cover" alt="Logo"/> : "น.ย."}
+                                {settings.coopLogo ? <img src={settings.coopLogo} className="w-full h-full object-cover" alt="Logo"/> : "ส."}
                                 </div>
                                 <h2 className="font-bold text-lg leading-tight">{settings.coopName || "ใบเสร็จรับเงิน"}</h2>
                                 <p className="text-xs text-gray-500 mt-1">เลขที่: {lastReceipt.id}</p>
@@ -713,13 +703,24 @@
                             <div className="bg-gray-50 p-4 rounded-2xl border border-gray-100 text-center"><p className="text-xs text-gray-500 mb-1">ยอดซื้อสะสม (ปีนี้)</p><p className="text-lg font-bold text-gray-800">฿{Number(memberData.totalSpent || 0).toLocaleString()}</p></div>
                         </div>
                         <div className="bg-purple-50 border border-purple-100 rounded-2xl p-5 space-y-3">
-                            <div className="flex justify-between items-center text-sm"><span className="text-purple-800 font-medium">เงินปันผลหุ้น ({settings.dividendRate}%)</span><span className="font-bold text-purple-900">฿{(Number(memberData.shares || 0) * Number(settings.sharePrice || 0) * (Number(settings.dividendRate || 0) / 100)).toLocaleString('th-TH', {minimumFractionDigits: 2})}</span></div>
-                            <div className="flex justify-between items-center text-sm"><span className="text-blue-800 font-medium">เงินเฉลี่ยคืน ({settings.refundRate}%)</span><span className="font-bold text-blue-900">฿{(Number(memberData.totalSpent || 0) * (Number(settings.refundRate || 0) / 100)).toLocaleString('th-TH', {minimumFractionDigits: 2})}</span></div>
-                            <div className="border-t border-purple-200 pt-3 flex justify-between items-end"><span className="font-bold text-gray-700">รวมรับเงินสุทธิ</span><span className="text-3xl font-black text-green-600">฿{((Number(memberData.shares || 0) * Number(settings.sharePrice || 0) * (Number(settings.dividendRate || 0) / 100)) + (Number(memberData.totalSpent || 0) * (Number(settings.refundRate || 0) / 100))).toLocaleString('th-TH', {minimumFractionDigits: 2, maximumFractionDigits: 2})}</span></div>
+                            <div className="flex justify-between items-center text-sm">
+                                <span className="text-purple-800 font-medium">สิทธิ์ปันผลหุ้น ({settings.dividendRate}%)</span>
+                                <span className="font-bold text-purple-900">฿{(Number(memberData.shares || 0) * Number(settings.sharePrice || 0) * (Number(settings.dividendRate || 0) / 100)).toLocaleString('th-TH', {minimumFractionDigits: 2})}</span>
+                            </div>
+                            <div className="flex justify-between items-center text-sm">
+                                <span className="text-blue-800 font-medium">สิทธิ์เฉลี่ยคืน ({settings.refundRate}%)</span>
+                                <span className="font-bold text-blue-900">฿{(Number(memberData.totalSpent || 0) * (Number(settings.refundRate || 0) / 100)).toLocaleString('th-TH', {minimumFractionDigits: 2})}</span>
+                            </div>
+                            <div className="border-t border-purple-200 pt-3 flex justify-between items-end"><span className="font-bold text-gray-700">สิทธิ์รับเงินสุทธิ</span><span className="text-3xl font-black text-green-600">฿{((Number(memberData.shares || 0) * Number(settings.sharePrice || 0) * (Number(settings.dividendRate || 0) / 100)) + (Number(memberData.totalSpent || 0) * (Number(settings.refundRate || 0) / 100))).toLocaleString('th-TH', {minimumFractionDigits: 2, maximumFractionDigits: 2})}</span></div>
                         </div>
-                        {memberData.isPaid && (
-                            <div className="bg-green-100 border border-green-200 text-green-800 p-3 rounded-xl text-center font-bold flex items-center justify-center gap-2">
-                                <CheckCircle size={20}/> รับเงินปันผลเรียบร้อยแล้ว
+                        
+                        {(memberData.paidDividend > 0 || memberData.paidRefund > 0) && (
+                            <div className="bg-green-100 border border-green-200 text-green-800 p-4 rounded-xl">
+                                <p className="font-bold mb-2 flex items-center gap-1"><CheckCircle size={18}/> ยอดที่รับเงินไปแล้ว:</p>
+                                <div className="text-sm space-y-1 ml-5">
+                                    {memberData.paidDividend > 0 && <div className="flex justify-between"><span>ปันผล:</span><span>฿{(memberData.paidDividend||0).toLocaleString('th-TH')}</span></div>}
+                                    {memberData.paidRefund > 0 && <div className="flex justify-between"><span>เฉลี่ยคืน:</span><span>฿{(memberData.paidRefund||0).toLocaleString('th-TH')}</span></div>}
+                                </div>
                             </div>
                         )}
                         <button onClick={() => { setMemberData(null); setSearchId(''); }} className="w-full text-center text-sm text-gray-500 hover:text-gray-800 font-medium py-2">ค้นหารหัสอื่น</button>
@@ -740,11 +741,11 @@
             );
         }
 
-        function StatCard({ title, value, icon, color }) {
+        function StatCard({ title, value, icon, color, subtitle }) {
             return (
-                <div className={`p-4 sm:p-5 rounded-xl border ${color} flex items-center gap-4 shadow-sm`}>
-                <div className="p-3 bg-white rounded-lg shadow-sm shrink-0">{icon}</div>
-                <div><p className="text-sm text-gray-600">{title}</p><p className="text-xl sm:text-2xl font-bold text-gray-800 truncate">{value}</p></div>
+                <div className={`p-4 sm:p-5 rounded-xl border ${color} flex items-center gap-4 shadow-sm relative overflow-hidden`}>
+                    <div className="p-3 bg-white rounded-lg shadow-sm shrink-0 z-10">{icon}</div>
+                    <div className="z-10"><p className="text-sm text-gray-600 font-medium">{title}</p><p className="text-xl sm:text-2xl font-black text-gray-800 truncate">{value}</p>{subtitle && <p className="text-[10px] text-gray-500 mt-1">{subtitle}</p>}</div>
                 </div>
             );
         }
@@ -785,7 +786,7 @@
 
             if (!isOpen) return null;
             return (
-                <div className="fixed inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center z-[150] p-4">
+                <div className="fixed inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center z-[150] p-4 print-hidden">
                 <div className="bg-white rounded-2xl w-full max-w-md overflow-hidden relative shadow-2xl animate-in zoom-in-95 flex flex-col">
                     <div className="p-4 border-b flex justify-between items-center bg-gray-50 shrink-0"><h3 className="font-bold text-gray-800 flex items-center gap-2"><Scan className="text-blue-600" /> {title || "สแกนบาร์โค้ด"}</h3><button onClick={onClose} className="text-gray-400 hover:text-red-500 bg-gray-200 hover:bg-red-50 p-1 rounded-full"><X size={20}/></button></div>
                     <div className="p-6 flex flex-col items-center bg-gray-900">
@@ -843,7 +844,7 @@
                         <input type="text" placeholder="🔍 ค้นหาสินค้าด้วยชื่อ..." className="w-full md:w-64 px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 outline-none" value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} />
                     </div>
                     </div>
-                    <div className="flex-1 p-4 overflow-y-auto bg-gray-100/50">
+                    <div className="flex-1 p-4 overflow-y-auto bg-gray-100/50 custom-scrollbar">
                     <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5 gap-4">
                         {filteredProducts.map(product => (
                         <div key={product.id} onClick={() => setCart(prev => prev.find(i=>i.id===product.id) ? prev.map(i=>i.id===product.id?{...i,qty:i.qty+1}:i) : [...prev,{...product,qty:1}])} className={`bg-white p-3 rounded-xl shadow-sm border cursor-pointer hover:shadow-md transition transform hover:-translate-y-1 relative ${Number(product.stock) <= 0 ? 'opacity-50 pointer-events-none' : 'border-gray-200 hover:border-green-400'}`}>
@@ -867,7 +868,7 @@
                     <button onClick={onOpenSearch} className="bg-blue-600 text-white px-3 py-1.5 rounded text-sm hover:bg-blue-700 transition shadow-sm font-medium flex items-center gap-1"><Search size={16} /> ค้นหา</button>
                     {posMemberId && members.find(m=>String(m.id) === String(posMemberId)) && (<div className="w-full flex items-center gap-1 text-sm text-green-700 font-bold mt-1 bg-green-100 px-2 py-1 rounded"><CheckCircle size={16} className="text-green-500" />{members.find(m=>String(m.id) === String(posMemberId)).name}</div>)}
                     </div>
-                    <div className="flex-1 overflow-y-auto p-3 bg-gray-50/50">
+                    <div className="flex-1 overflow-y-auto p-3 bg-gray-50/50 custom-scrollbar">
                     {cart.length === 0 ? <div className="h-full flex flex-col items-center justify-center text-gray-400"><ShoppingCart size={48} className="mb-2 opacity-50" /><p>ยังไม่มีสินค้า</p></div> : 
                         <div className="space-y-2">
                         {cart.map(item => (
@@ -1075,6 +1076,7 @@
 
         function Members({ members, setMembers, settings, addLog }) {
             const [editModal, setEditModal] = useState(null);
+            const [payoutModal, setPayoutModal] = useState(null); // { member: {}, form: { dividend: 0, refund: 0 } }
 
             const handleSave = (e) => {
                 e.preventDefault();
@@ -1093,22 +1095,33 @@
                 }
             };
 
-            const togglePaidStatus = (id, currentStatus) => {
+            const handleSavePayout = (e) => {
+                e.preventDefault();
+                const payDiv = parseFloat(payoutModal.form.dividend) || 0;
+                const payRef = parseFloat(payoutModal.form.refund) || 0;
+                
                 const newMembers = members.map(m => {
-                    if (String(m.id) === String(id)) {
-                        return { ...m, isPaid: !currentStatus };
+                    if (String(m.id) === String(payoutModal.member.id)) {
+                        return { 
+                            ...m, 
+                            paidDividend: (m.paidDividend || 0) + payDiv,
+                            paidRefund: (m.paidRefund || 0) + payRef
+                        };
                     }
                     return m;
                 });
+                
                 setMembers(newMembers);
-                addLog('อัปเดตสถานะปันผล', `รหัส ${id} ถูกเปลี่ยนเป็น: ${!currentStatus ? 'จ่ายแล้ว' : 'ยังไม่จ่าย'}`);
+                addLog('จ่ายเงินสมาชิก', `จ่ายปันผล ฿${payDiv}, เฉลี่ยคืน ฿${payRef} ให้กับ ${payoutModal.member.name}`);
+                alert('บันทึกการจ่ายเงินสำเร็จ ยอดคงเหลือจะเก็บสมทบในปีถัดไป');
+                setPayoutModal(null);
             };
 
             return (
                 <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6">
                 <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-6">
                     <h3 className="text-lg font-bold text-gray-800">ระบบจัดการสมาชิก & การปันผล</h3>
-                    <button onClick={()=>setEditModal({id:'NEW'+Date.now().toString().slice(-4), name:'', type:'นักเรียน', classLevel:'อนุบาล 2', shares:10, totalSpent:0, isPaid: false})} className="bg-orange-500 text-white px-4 py-2 rounded-lg hover:bg-orange-600 transition flex items-center gap-2 text-sm font-medium w-full sm:w-auto justify-center"><Users size={16} /> สมาชิกใหม่</button>
+                    <button onClick={()=>setEditModal({id:'NEW'+Date.now().toString().slice(-4), name:'', type:'นักเรียน', classLevel:'อนุบาล 2', shares:10, totalSpent:0, paidDividend:0, paidRefund:0})} className="bg-orange-500 text-white px-4 py-2 rounded-lg hover:bg-orange-600 transition flex items-center gap-2 text-sm font-medium w-full sm:w-auto justify-center"><Users size={16} /> สมาชิกใหม่</button>
                 </div>
 
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
@@ -1124,7 +1137,7 @@
                 </div>
 
                 <div className="overflow-x-auto rounded-lg border border-gray-200">
-                    <table className="w-full text-left border-collapse min-w-[1200px]">
+                    <table className="w-full text-left border-collapse min-w-[1400px]">
                     <thead>
                         <tr className="bg-gray-50 border-b border-gray-200 text-xs text-gray-600">
                         <th className="p-3 font-medium">รหัส นร./ครู</th>
@@ -1132,31 +1145,48 @@
                         <th className="p-3 font-medium">ชั้น/ประเภท</th>
                         <th className="p-3 font-medium text-right">หุ้น (x{settings.sharePrice}฿)</th>
                         <th className="p-3 font-medium text-right">ยอดซื้อสะสม</th>
-                        <th className="p-3 font-medium text-right text-purple-600 bg-purple-50">ปันผลหุ้น ({settings.dividendRate}%)</th>
-                        <th className="p-3 font-medium text-right text-blue-600 bg-blue-50">เฉลี่ยคืน ({settings.refundRate}%)</th>
-                        <th className="p-3 font-medium text-right text-green-700 bg-green-50">รวมรับเงินสุทธิ (฿)</th>
-                        <th className="p-3 font-medium text-center">สถานะจ่ายเงิน</th>
-                        <th className="p-3 font-medium text-center">จัดการ</th>
+                        <th className="p-3 font-medium text-right text-purple-600 bg-purple-50">สิทธิ์ปันผล ({settings.dividendRate}%)</th>
+                        <th className="p-3 font-medium text-right text-blue-600 bg-blue-50">สิทธิ์เฉลี่ยคืน ({settings.refundRate}%)</th>
+                        <th className="p-3 font-medium text-right text-green-700 bg-green-50">คงเหลือต้องจ่าย (฿)</th>
+                        <th className="p-3 font-medium text-center">จัดการจ่ายเงิน</th>
+                        <th className="p-3 font-medium text-center">แก้ไข/ลบ</th>
                         </tr>
                     </thead>
                     <tbody className="divide-y divide-gray-100 text-sm">
                         {members.slice().sort((a, b) => getGradeWeight(a.classLevel) - getGradeWeight(b.classLevel)).map(m => {
-                        const dividend = (Number(m.shares||0) * Number(settings.sharePrice||0) * (Number(settings.dividendRate||0) / 100));
-                        const refund = (Number(m.totalSpent||0) * (Number(settings.refundRate||0) / 100));
-                        const totalPayout = dividend + refund;
+                        const totalDividend = (Number(m.shares||0) * Number(settings.sharePrice||0) * (Number(settings.dividendRate||0) / 100));
+                        const totalRefund = (Number(m.totalSpent||0) * (Number(settings.refundRate||0) / 100));
+                        
+                        const remainDiv = Math.max(0, totalDividend - (m.paidDividend||0));
+                        const remainRef = Math.max(0, totalRefund - (m.paidRefund||0));
+                        const totalRemain = remainDiv + remainRef;
+                        
+                        const isFullyPaid = totalRemain <= 0 && (totalDividend > 0 || totalRefund > 0);
+
                         return (
-                            <tr key={m.id} className={`hover:bg-gray-50 ${m.isPaid ? 'opacity-60' : ''}`}>
+                            <tr key={m.id} className={`hover:bg-gray-50 ${isFullyPaid ? 'opacity-70 bg-gray-50' : ''}`}>
                             <td className="p-3 font-mono text-gray-600 font-bold">{m.id}</td>
                             <td className="p-3 font-medium text-gray-800">{m.name}</td>
                             <td className="p-3"><span className={`px-2 py-1 rounded-full text-xs border whitespace-nowrap ${m.type === 'นักเรียน' ? 'bg-blue-50 text-blue-700 border-blue-200' : 'bg-green-50 text-green-700 border-green-200'}`}>{m.classLevel}</span></td>
                             <td className="p-3 text-right font-bold text-gray-700">{m.shares}</td>
                             <td className="p-3 text-right text-green-600 font-bold">฿{Number(m.totalSpent||0).toLocaleString()}</td>
-                            <td className="p-3 text-right font-bold text-purple-700 bg-purple-50/30">฿{dividend.toLocaleString('th-TH', {minimumFractionDigits: 2, maximumFractionDigits: 2})}</td>
-                            <td className="p-3 text-right font-bold text-blue-700 bg-blue-50/30">฿{refund.toLocaleString('th-TH', {minimumFractionDigits: 2, maximumFractionDigits: 2})}</td>
-                            <td className="p-3 text-right font-black text-green-700 bg-green-50/50">฿{totalPayout.toLocaleString('th-TH', {minimumFractionDigits: 2, maximumFractionDigits: 2})}</td>
+                            <td className="p-3 text-right bg-purple-50/30">
+                                <div className="font-bold text-purple-700">฿{totalDividend.toLocaleString('th-TH', {minimumFractionDigits: 2})}</div>
+                                {(m.paidDividend > 0) && <div className="text-[10px] text-gray-500">จ่ายแล้ว ฿{m.paidDividend.toLocaleString()}</div>}
+                            </td>
+                            <td className="p-3 text-right bg-blue-50/30">
+                                <div className="font-bold text-blue-700">฿{totalRefund.toLocaleString('th-TH', {minimumFractionDigits: 2})}</div>
+                                {(m.paidRefund > 0) && <div className="text-[10px] text-gray-500">จ่ายแล้ว ฿{m.paidRefund.toLocaleString()}</div>}
+                            </td>
+                            <td className="p-3 text-right bg-green-50/50">
+                                <div className={`font-black ${totalRemain > 0 ? 'text-red-600' : 'text-green-700'}`}>฿{totalRemain.toLocaleString('th-TH', {minimumFractionDigits: 2})}</div>
+                            </td>
                             <td className="p-3 text-center">
-                                <button onClick={() => togglePaidStatus(m.id, m.isPaid)} className={`flex items-center justify-center gap-1 mx-auto px-3 py-1 rounded-lg text-xs font-bold transition shadow-sm border ${m.isPaid ? 'bg-green-100 text-green-700 border-green-300 hover:bg-green-200' : 'bg-white text-gray-500 border-gray-300 hover:bg-gray-100'}`}>
-                                    {m.isPaid ? <><CheckSquare size={16}/> จ่ายแล้ว (เต็มจำนวน)</> : <><Square size={16}/> รอจ่าย</>}
+                                <button 
+                                    onClick={() => setPayoutModal({member: m, form: { dividend: remainDiv.toFixed(2), refund: remainRef.toFixed(2) }})} 
+                                    disabled={totalRemain <= 0}
+                                    className={`flex items-center justify-center gap-1 mx-auto px-3 py-1.5 rounded-lg text-xs font-bold transition shadow-sm border ${totalRemain <= 0 ? 'bg-gray-200 text-gray-500 border-gray-300' : 'bg-green-100 text-green-700 border-green-300 hover:bg-green-200 hover:scale-105'}`}>
+                                    {totalRemain <= 0 ? <><CheckCircle size={14}/> จ่ายครบแล้ว</> : <><Coin size={14}/> จ่ายเงิน</>}
                                 </button>
                             </td>
                             <td className="p-3 text-center">
@@ -1172,6 +1202,7 @@
                     </table>
                 </div>
 
+                {/* Edit Member Modal */}
                 {editModal && (
                     <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[100] p-4">
                     <div className="bg-white rounded-xl p-6 w-[400px] max-w-full shadow-2xl">
@@ -1194,6 +1225,44 @@
                         </div>
                         </form>
                     </div>
+                    </div>
+                )}
+
+                {/* Payout Modal */}
+                {payoutModal && (
+                    <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-[150] p-4 backdrop-blur-sm">
+                        <div className="bg-white rounded-2xl p-6 w-[400px] max-w-full shadow-2xl animate-in zoom-in-95">
+                            <div className="flex justify-between items-center mb-4 border-b pb-3">
+                                <h3 className="text-xl font-bold text-gray-800 flex items-center gap-2"><Coin className="text-green-600"/> จ่ายเงินสมาชิก</h3>
+                                <button onClick={() => setPayoutModal(null)} className="text-gray-400 hover:text-red-500"><X size={20}/></button>
+                            </div>
+                            
+                            <div className="bg-gray-50 p-3 rounded-lg mb-4">
+                                <p className="text-sm font-bold text-gray-800">{payoutModal.member.name}</p>
+                                <p className="text-xs text-gray-500">รหัส: {payoutModal.member.id}</p>
+                            </div>
+
+                            <form onSubmit={handleSavePayout} className="space-y-4">
+                                <div className="bg-purple-50 p-3 rounded-xl border border-purple-100">
+                                    <label className="block text-sm font-bold text-purple-800 mb-1">ยอดจ่ายเงินปันผลหุ้น (฿)</label>
+                                    <p className="text-[10px] text-purple-600 mb-2">จ่ายได้สูงสุด: ฿{payoutModal.form.dividend}</p>
+                                    <input type="number" step="0.01" max={payoutModal.form.dividend} value={payoutModal.form.dividend} onChange={e=>setPayoutModal({...payoutModal, form: {...payoutModal.form, dividend: e.target.value}})} className="w-full p-2 border border-purple-300 rounded focus:ring-2 focus:ring-purple-500 outline-none font-bold text-purple-900" required />
+                                </div>
+                                <div className="bg-blue-50 p-3 rounded-xl border border-blue-100">
+                                    <label className="block text-sm font-bold text-blue-800 mb-1">ยอดจ่ายเงินเฉลี่ยคืน (฿)</label>
+                                    <p className="text-[10px] text-blue-600 mb-2">จ่ายได้สูงสุด: ฿{payoutModal.form.refund}</p>
+                                    <input type="number" step="0.01" max={payoutModal.form.refund} value={payoutModal.form.refund} onChange={e=>setPayoutModal({...payoutModal, form: {...payoutModal.form, refund: e.target.value}})} className="w-full p-2 border border-blue-300 rounded focus:ring-2 focus:ring-blue-500 outline-none font-bold text-blue-900" required />
+                                </div>
+                                
+                                <div className="text-xs text-gray-500 text-center bg-gray-50 p-2 rounded">
+                                    * ยอดที่ยังไม่จ่ายในรอบนี้ จะถูกเก็บเป็นยอดยกยอดไปในปีถัดไป
+                                </div>
+
+                                <button type="submit" className="w-full bg-green-600 text-white font-bold py-3 rounded-xl hover:bg-green-700 transition shadow-md flex justify-center items-center gap-2">
+                                    ยืนยันการจ่ายเงิน <CheckCircle size={18}/>
+                                </button>
+                            </form>
+                        </div>
                     </div>
                 )}
             </div>
@@ -1256,7 +1325,7 @@
 
                 const newExpenses = [newExpense, ...expenses];
                 setExpenses(newExpenses, newExpense);
-                addLog(modalMode === 'purchase' ? 'จ่ายเงินซื้อสินค้า' : 'ให้ยืมเงินรองจ่าย', `เบิกเงิน ฿${amt} ให้ ${form.receiver} (${form.details})`);
+                addLog(modalMode === 'purchase' ? 'จ่ายเงินซื้อของเข้าร้าน' : 'ให้ยืมเงินรองจ่าย', `เบิกเงิน ฿${amt} ให้ ${form.receiver} (${form.details})`);
                 setModalMode(null);
                 setForm({ amount: '', receiver: '', details: '', image: null });
                 alert("บันทึกการเบิกจ่ายเงินสำเร็จ");
@@ -1266,6 +1335,7 @@
                 e.preventDefault();
                 const spent = parseFloat(clearForm.spent);
                 if (isNaN(spent) || spent < 0) return alert("กรุณากรอกยอดที่ซื้อของจริงให้ถูกต้อง");
+                if (!clearForm.image) return alert("กรุณาแนบรูปใบเสร็จการซื้อของจริงเพื่อเคลียร์ยอด");
                 
                 const originalAmt = clearAdvanceExp.amount;
                 const changeToReturn = originalAmt - spent; 
@@ -1285,15 +1355,15 @@
                 const newExpenses = [newExpense, ...expenses];
                 setExpenses(newExpenses, newExpense);
                 
-                let logMsg = `เคลียร์ยอด ${clearAdvanceExp.id} (ซื้อจริง ${spent}฿, `;
-                if (changeToReturn > 0) logMsg += `คืนเงินทอน ${changeToReturn}฿ เข้าลิ้นชัก)`;
+                let logMsg = `เคลียร์ยอด ${clearAdvanceExp.id} เป็นการซื้อของเข้าร้าน (ซื้อจริง ${spent}฿, `;
+                if (changeToReturn > 0) logMsg += `ทอนเก็บลิ้นชัก ${changeToReturn}฿)`;
                 else if (changeToReturn < 0) logMsg += `เบิกเพิ่ม ${-changeToReturn}฿ จากลิ้นชัก)`;
                 else logMsg += `พอดีกับยอดที่ยืม)`;
                 
-                addLog('เคลียร์เงินยืม', logMsg);
+                addLog('เคลียร์เงินยืม (ซื้อของเข้าร้าน)', logMsg);
                 setClearAdvanceExp(null);
                 setClearForm({ spent: '', image: null });
-                alert("บันทึกการเคลียร์ยอดสำเร็จ เงินในลิ้นชักได้รับการปรับปรุงแล้ว!");
+                alert("บันทึกการเคลียร์ยอดสำเร็จ ยอดการซื้อของได้ถูกบันทึก และเงินในลิ้นชักได้รับการปรับปรุงแล้ว!");
             };
 
             const checkIsCleared = (expId) => {
@@ -1306,13 +1376,13 @@
                     <div className="flex items-center gap-4">
                     <div className="w-16 h-16 bg-blue-100 text-blue-600 rounded-full flex items-center justify-center"><Wallet size={32}/></div>
                     <div>
-                        <p className="text-sm font-bold text-gray-500">เงินสดคงเหลือ (ทุนหุ้น + ยอดขาย - เบิกจ่าย + คืนทอน)</p>
+                        <p className="text-sm font-bold text-gray-500">เงินสดคงเหลือลิ้นชัก (ทุนหุ้น + ยอดขาย - เบิกจ่าย)</p>
                         <p className={`text-4xl font-black ${currentDrawerCash < 0 ? 'text-red-600' : 'text-blue-700'}`}>฿{currentDrawerCash.toLocaleString('th-TH', {minimumFractionDigits:2})}</p>
                         {currentDrawerCash < 0 && <p className="text-xs text-red-500 mt-1">* เงินสดติดลบ (มีการนำเงินส่วนตัวมาเติม)</p>}
                     </div>
                     </div>
                     <div className="flex gap-3 w-full md:w-auto">
-                        <button onClick={() => setModalMode('purchase')} className="flex-1 md:flex-none bg-green-600 text-white px-6 py-3 rounded-lg font-bold hover:bg-green-700 transition flex items-center justify-center gap-2 shadow-sm"><ShoppingCart size={18}/> ซื้อของเข้าร้าน</button>
+                        <button onClick={() => setModalMode('purchase')} className="flex-1 md:flex-none bg-green-600 text-white px-6 py-3 rounded-lg font-bold hover:bg-green-700 transition flex items-center justify-center gap-2 shadow-sm"><ShoppingCart size={18}/> เบิกเงินซื้อของเข้าร้าน</button>
                         <button onClick={() => setModalMode('advance')} className="flex-1 md:flex-none bg-orange-500 text-white px-6 py-3 rounded-lg font-bold hover:bg-orange-600 transition flex items-center justify-center gap-2 shadow-sm"><Receipt size={18}/> ให้ยืมเงินรองจ่าย</button>
                     </div>
                 </div>
@@ -1328,7 +1398,7 @@
                             <th className="p-3">ผู้บันทึก (Admin)</th>
                             <th className="p-3">ผู้รับเงิน/ร้านค้า</th>
                             <th className="p-3">รายละเอียด</th>
-                            <th className="p-3 text-right">ยอดเบิก/คืน (฿)</th>
+                            <th className="p-3 text-right">ยอดเบิก/ทอน (฿)</th>
                             <th className="p-3 text-center">หลักฐาน</th>
                             <th className="p-3 text-center">สถานะ/เคลียร์ยอด</th>
                             </tr>
@@ -1366,7 +1436,7 @@
                                             isCleared ? (
                                                 <span className="text-green-600 font-bold text-xs flex items-center justify-center gap-1"><CheckCircle size={14}/> เคลียร์แล้ว</span>
                                             ) : (
-                                                <button onClick={() => {setClearAdvanceExp(exp); setClearForm({spent: '', image: null})}} className="bg-orange-100 text-orange-700 hover:bg-orange-200 px-3 py-1 rounded-lg text-xs font-bold transition shadow-sm border border-orange-300">เคลียร์ยอด</button>
+                                                <button onClick={() => {setClearAdvanceExp(exp); setClearForm({spent: '', image: null})}} className="bg-orange-100 text-orange-700 hover:bg-orange-200 px-3 py-1 rounded-lg text-xs font-bold transition shadow-sm border border-orange-300">แจ้งยอดซื้อจริง (เคลียร์)</button>
                                             )
                                         ) : <span className="text-gray-300 text-xs">-</span>}
                                     </td>
@@ -1383,11 +1453,11 @@
                     <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-[100] p-4 backdrop-blur-sm">
                     <div className="bg-white rounded-2xl w-full max-w-lg overflow-hidden shadow-2xl animate-in zoom-in-95">
                         <div className={`p-4 flex justify-between items-center text-white ${modalMode === 'purchase' ? 'bg-green-600' : 'bg-orange-500'}`}>
-                            <h3 className="font-bold text-lg flex items-center gap-2">{modalMode === 'purchase' ? <><ShoppingCart/> บันทึกการซื้อสินค้าเข้าร้าน</> : <><Receipt/> บันทึกให้ยืมเงินรองจ่าย</>}</h3>
+                            <h3 className="font-bold text-lg flex items-center gap-2">{modalMode === 'purchase' ? <><ShoppingCart/> เบิกเงินสดเพื่อไปซื้อของเข้าร้าน</> : <><Receipt/> บันทึกให้ยืมเงินรองจ่าย</>}</h3>
                             <button onClick={() => {setModalMode(null); setForm({amount:'', receiver:'', details:'', image:null})}} className="text-white/70 hover:text-white"><X size={20}/></button>
                         </div>
                         <div className="p-6 bg-gray-50 border-b flex justify-between items-center">
-                            <span className="text-gray-600 font-medium">เงินสดในระบบปัจจุบัน:</span>
+                            <span className="text-gray-600 font-medium">เงินสดในลิ้นชักปัจจุบัน:</span>
                             <span className="text-2xl font-black text-blue-700">฿{currentDrawerCash.toLocaleString('th-TH', {minimumFractionDigits:2})}</span>
                         </div>
                         <form onSubmit={handleSaveExpense} className="p-6 space-y-4 bg-white">
@@ -1396,7 +1466,7 @@
                             <input type="number" value={form.amount} onChange={e=>setForm({...form, amount: e.target.value})} className="w-full text-2xl font-bold text-red-600 p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none" placeholder="0.00" required autoFocus />
                             </div>
                             <div>
-                            <label className="block text-sm font-bold text-gray-700 mb-1">{modalMode === 'purchase' ? 'ชื่อร้านค้า/สถานที่ซื้อ' : 'ชื่อผู้ยืมเงิน'} <span className="text-red-500">*</span></label>
+                            <label className="block text-sm font-bold text-gray-700 mb-1">{modalMode === 'purchase' ? 'ชื่อร้านค้า/สถานที่ที่จะไปซื้อ' : 'ชื่อผู้ยืมเงิน'} <span className="text-red-500">*</span></label>
                             <input type="text" value={form.receiver} onChange={e=>setForm({...form, receiver: e.target.value})} className="w-full p-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none" placeholder={modalMode === 'purchase' ? 'เช่น แม็คโคร, ร้านสมปอง' : 'เช่น ครูวิชัย'} required />
                             </div>
                             <div>
@@ -1404,7 +1474,7 @@
                             <textarea value={form.details} onChange={e=>setForm({...form, details: e.target.value})} className="w-full p-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none h-20 resize-none" placeholder="ระบุสิ่งที่ซื้อ หรือเหตุผลที่ยืมเงิน..." required />
                             </div>
                             <div>
-                            <label className="block text-sm font-bold text-gray-700 mb-1">แนบรูปภาพใบเสร็จ/หลักฐาน</label>
+                            <label className="block text-sm font-bold text-gray-700 mb-1">แนบรูปภาพใบเสร็จ/หลักฐาน (ถ้ามี)</label>
                             <div className="border-2 border-dashed border-gray-300 rounded-lg p-4 text-center hover:bg-gray-50 transition relative">
                                 <input type="file" accept="image/*" onChange={(e) => handleImageUpload(e, form, setForm)} className="absolute inset-0 w-full h-full opacity-0 cursor-pointer" />
                                 {form.image ? (
@@ -1427,53 +1497,55 @@
                     <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-[100] p-4 backdrop-blur-sm">
                     <div className="bg-white rounded-2xl w-full max-w-lg overflow-hidden shadow-2xl animate-in zoom-in-95">
                         <div className="p-4 flex justify-between items-center text-white bg-blue-600">
-                            <h3 className="font-bold text-lg flex items-center gap-2"><Receipt/> เคลียร์ยอดเงินยืมรองจ่าย</h3>
+                            <h3 className="font-bold text-lg flex items-center gap-2"><Receipt/> บันทึกยอดซื้อจริงเพื่อเคลียร์เงินรองจ่าย</h3>
                             <button onClick={() => {setClearAdvanceExp(null); setClearForm({spent:'', image:null})}} className="text-white/70 hover:text-white"><X size={20}/></button>
                         </div>
                         
                         <div className="p-6 bg-gray-50 border-b">
                             <div className="flex justify-between items-center mb-2">
-                            <span className="text-gray-600 font-medium">ผู้ยืม:</span>
+                            <span className="text-gray-600 font-medium">ผู้เบิกเงิน:</span>
                             <span className="font-bold text-gray-800">{clearAdvanceExp.receiver}</span>
                             </div>
                             <div className="flex justify-between items-center">
-                            <span className="text-gray-600 font-medium">ยอดที่ยืมไป (ตั้งต้น):</span>
+                            <span className="text-gray-600 font-medium">ยอดที่เบิกไป (เงินตั้งต้น):</span>
                             <span className="text-2xl font-black text-orange-600">฿{clearAdvanceExp.amount.toLocaleString()}</span>
                             </div>
                         </div>
 
                         <form onSubmit={handleSaveClearAdvance} className="p-6 space-y-4 bg-white">
                             <div className="bg-blue-50 border border-blue-200 p-4 rounded-xl">
-                                <label className="block text-sm font-bold text-blue-800 mb-1">ยอดที่นำไปซื้อของจริง (บาท) <span className="text-red-500">*</span></label>
-                                <input type="number" value={clearForm.spent} onChange={e=>setClearForm({...clearForm, spent: e.target.value})} className="w-full text-2xl font-bold text-blue-900 p-3 border border-blue-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none bg-white" placeholder="เช่น 80" required autoFocus />
+                                <label className="block text-sm font-bold text-blue-800 mb-1">ยอดที่นำไปซื้อของจริง (ตามใบเสร็จ) <span className="text-red-500">*</span></label>
+                                <input type="number" value={clearForm.spent} onChange={e=>setClearForm({...clearForm, spent: e.target.value})} className="w-full text-2xl font-bold text-blue-900 p-3 border border-blue-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none bg-white" placeholder="เช่น 800" required autoFocus />
                                 
                                 {clearForm.spent !== '' && (
                                     <div className="mt-4 pt-4 border-t border-blue-200 flex justify-between items-center">
                                         <span className="font-bold text-gray-700">
-                                            {clearAdvanceExp.amount - parseFloat(clearForm.spent) >= 0 ? 'เงินทอนที่จะคืนเข้าลิ้นชัก:' : 'ต้องจ่ายเพิ่มจากลิ้นชัก:'}
+                                            {clearAdvanceExp.amount - parseFloat(clearForm.spent) > 0 ? 'จำนวนเงินทอนที่จะคืนเข้าลิ้นชัก:' : 
+                                             clearAdvanceExp.amount - parseFloat(clearForm.spent) < 0 ? 'จำนวนเงินที่ลิ้นชักต้องจ่ายชดเชยเพิ่ม:' : 
+                                             'พอดีกับยอดที่เบิกไป'}
                                         </span>
-                                        <span className={`text-2xl font-black ${clearAdvanceExp.amount - parseFloat(clearForm.spent) >= 0 ? 'text-green-600' : 'text-red-600'}`}>
-                                            ฿{Math.abs(clearAdvanceExp.amount - parseFloat(clearForm.spent)).toLocaleString()}
+                                        <span className={`text-2xl font-black ${clearAdvanceExp.amount - parseFloat(clearForm.spent) > 0 ? 'text-green-600' : clearAdvanceExp.amount - parseFloat(clearForm.spent) < 0 ? 'text-red-600' : 'text-gray-600'}`}>
+                                            {clearAdvanceExp.amount - parseFloat(clearForm.spent) === 0 ? '฿0' : `฿${Math.abs(clearAdvanceExp.amount - parseFloat(clearForm.spent)).toLocaleString()}`}
                                         </span>
                                     </div>
                                 )}
                             </div>
 
                             <div>
-                                <label className="block text-sm font-bold text-gray-700 mb-1">แนบรูปภาพใบเสร็จที่ไปซื้อของมา (จำเป็น)</label>
+                                <label className="block text-sm font-bold text-gray-700 mb-1">แนบรูปภาพใบเสร็จสินค้าที่ซื้อมาเข้าร้าน <span className="text-red-500">*</span></label>
                                 <div className="border-2 border-dashed border-gray-300 rounded-lg p-4 text-center hover:bg-gray-50 transition relative">
                                     <input type="file" accept="image/*" onChange={(e) => handleImageUpload(e, clearForm, setClearForm)} className="absolute inset-0 w-full h-full opacity-0 cursor-pointer" required />
                                     {clearForm.image ? (
                                     <div className="flex flex-col items-center"><img src={clearForm.image} alt="Evidence" className="h-24 object-contain rounded border mb-2 shadow-sm"/><span className="text-xs text-blue-600 font-medium">กดเพื่อเปลี่ยนรูปภาพ</span></div>
                                     ) : (
-                                    <div className="flex flex-col items-center text-gray-400 py-2"><UploadCloud size={32} className="mb-2"/><p className="text-sm font-medium">คลิกเพื่อถ่ายรูป / อัปโหลดไฟล์ภาพ</p></div>
+                                    <div className="flex flex-col items-center text-gray-400 py-2"><UploadCloud size={32} className="mb-2"/><p className="text-sm font-medium">คลิกเพื่อถ่ายรูปใบเสร็จ</p></div>
                                     )}
                                 </div>
                             </div>
 
                             <div className="pt-4 flex gap-3">
                                 <button type="button" onClick={() => {setClearAdvanceExp(null); setClearForm({spent:'', image:null})}} className="flex-1 py-3 bg-gray-100 text-gray-700 font-bold rounded-lg hover:bg-gray-200 transition">ยกเลิก</button>
-                                <button type="submit" className={`flex-1 py-3 text-white font-bold rounded-lg transition shadow-md bg-blue-600 hover:bg-blue-700`}>ยืนยันเคลียร์ยอด</button>
+                                <button type="submit" className={`flex-1 py-3 text-white font-bold rounded-lg transition shadow-md bg-blue-600 hover:bg-blue-700`}>ยืนยันเคลียร์ยอดเป็นรายจ่าย</button>
                             </div>
                         </form>
                     </div>
@@ -1655,18 +1727,25 @@
 
         function Dashboard({ products, members, sales, expenses, settings, setActiveTab }) {
             const lowStockProducts = products.filter(p => Number(p.stock) <= Number(p.minStock||0));
-            const totalSalesToday = sales.reduce((sum, sale) => sum + Number(sale.total||0), 0);
             
-            const totalShareCapital = members.reduce((sum, m) => sum + Number(m.shares||0), 0) * Number(settings.sharePrice||0);
-            const totalSalesCash = sales.reduce((sum, s) => sum + Number(s.total||0), 0);
-            const totalExpensesCash = expenses.reduce((sum, e) => sum + Number(e.amount||0), 0);
-            const currentDrawerCash = totalShareCapital + totalSalesCash - totalExpensesCash;
+            // ใช้ useMemo เพื่อป้องกันการคำนวณซ้ำบ่อยๆ
+            const { totalSalesToday, currentDrawerCash } = useMemo(() => {
+                const today = new Date().toLocaleDateString('th-TH');
+                const todaySales = sales.filter(s => s.date.includes(today)).reduce((sum, sale) => sum + Number(sale.total||0), 0);
+                
+                const totalShareCapital = members.reduce((sum, m) => sum + Number(m.shares||0), 0) * Number(settings.sharePrice||0);
+                const totalSalesCash = sales.reduce((sum, s) => sum + Number(s.total||0), 0);
+                const totalExpensesCash = expenses.reduce((sum, e) => sum + Number(e.amount||0), 0);
+                const drawer = totalShareCapital + totalSalesCash - totalExpensesCash;
+                
+                return { totalSalesToday: todaySales, currentDrawerCash: drawer };
+            }, [sales, members, expenses, settings]);
 
             return (
                 <div className="space-y-6">
                 <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
                     <StatCard title="ยอดขายวันนี้" value={`฿${totalSalesToday.toLocaleString()}`} icon={<BarChart2 className="text-blue-500" />} color="bg-blue-50 border-blue-100" />
-                    <StatCard title="เงินสดคงเหลือระบบ" value={`฿${currentDrawerCash.toLocaleString()}`} icon={<Wallet className="text-green-500" />} color="bg-green-50 border-green-100" />
+                    <StatCard title="เงินสดในลิ้นชัก(ทั้งหมด)" value={`฿${currentDrawerCash.toLocaleString()}`} icon={<Wallet className="text-green-500" />} color="bg-green-50 border-green-100" subtitle={currentDrawerCash < 0 ? "มีส่วนต่างที่ต้องเติมเงิน" : ""} />
                     <StatCard title="สินค้าในระบบ" value={`${products.length} รายการ`} icon={<Package className="text-purple-500" />} color="bg-purple-50 border-purple-100" />
                     <StatCard title="สมาชิกทั้งหมด" value={`${members.length} คน`} icon={<Users className="text-orange-500" />} color="bg-orange-50 border-orange-100" />
                 </div>
@@ -1674,7 +1753,7 @@
                     <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-5">
                     <h3 className="text-lg font-bold text-gray-800 mb-4 flex items-center gap-2"><AlertCircle className="text-red-500" /> สินค้าใกล้หมดสต็อก</h3>
                     {lowStockProducts.length > 0 ? (
-                        <div className="space-y-3">
+                        <div className="space-y-3 max-h-64 overflow-y-auto custom-scrollbar pr-2">
                         {lowStockProducts.map(p => (
                             <div key={p.id} className="flex justify-between items-center p-3 bg-red-50 rounded-lg border border-red-100">
                             <div className="flex items-center gap-3"><img src={p.image || 'https://placehold.co/100x100?text=No+Image'} className="w-10 h-10 rounded object-cover" /><div><p className="font-medium text-gray-800">{p.name}</p><p className="text-xs text-gray-500">บาร์โค้ด: {p.barcode}</p></div></div>
@@ -1698,53 +1777,96 @@
             );
         }
 
-        function PrintReportModal({ sales, products, members, settings, expenses, onClose, totalShareCapital, grossProfit, totalPayout, netProfit, totalSales, totalExpensesCash, availableCashFlow, topProducts }) {
+        function PrintReportModal({ sales, products, members, settings, expenses, onClose, reportTypeLabel, dateRangeLabel }) {
             const [reporterName, setReporterName] = useState("");
-            const [managerName, setManagerName] = useState("");
+            const [managerName, setManagerName] = useState("นางประภาพร สร้อยแม้น"); // Default Name
             const [coopTeacherName, setCoopTeacherName] = useState("");
             const [directorName, setDirectorName] = useState("");
-            const [reportDate, setReportDate] = useState(new Date().toLocaleDateString('th-TH', { year: 'numeric', month: 'long', day: 'numeric' }));
+            const [printDate, setPrintDate] = useState(new Date().toLocaleDateString('th-TH', { year: 'numeric', month: 'long', day: 'numeric' }));
+
+            // Recalculate everything specifically for the filtered subset passed to this modal
+            const productSalesCount = {};
+            let totalSales = 0; let totalCost = 0;
+            sales.forEach(sale => {
+                totalSales += Number(sale.total||0);
+                if(Array.isArray(sale.items)){
+                    sale.items.forEach(item => {
+                        productSalesCount[item.id] = (productSalesCount[item.id] || 0) + Number(item.qty||0);
+                        totalCost += (Number(item.cost||0) * Number(item.qty||0));
+                    });
+                }
+            });
+            const grossProfit = totalSales - totalCost;
+
+            let totalPayout = 0; let totalShareCapital = 0;
+            members.forEach(m => {
+                totalShareCapital += (Number(m.shares||0) * Number(settings.sharePrice||0));
+                totalPayout += (Number(m.shares||0) * Number(settings.sharePrice||0) * (Number(settings.dividendRate||0) / 100)) + 
+                               (Number(m.totalSpent||0) * (Number(settings.refundRate||0) / 100));
+            });
+            const netProfit = grossProfit - totalPayout;
+            const totalExpensesCash = expenses.reduce((sum, e) => sum + Number(e.amount||0), 0);
+            
+            // คำนวณรายจ่ายที่เคลียร์แล้ว (หักล้างกัน)
+            const actualExpenses = expenses.reduce((sum, e) => {
+                if(e.type === 'purchase') return sum + Number(e.amount);
+                if(e.type === 'advance') return sum + Number(e.amount);
+                if(e.type === 'advance_clear') return sum + Number(e.amount); // amount can be negative if refund
+                return sum;
+            }, 0);
+
+            const topProducts = Object.entries(productSalesCount).map(([id, qty]) => ({ ...products.find(p => String(p.id) === String(id)), soldQty: qty })).sort((a, b) => b.soldQty - a.soldQty).slice(0, 5);
 
             return (
-                <div className="fixed inset-0 z-[200] flex bg-gray-900/90 print:bg-white print:static print:inset-auto">
-                    <div className="w-80 bg-white p-6 overflow-y-auto print-hidden flex flex-col shadow-2xl z-10">
+                <div className="fixed inset-0 z-[200] flex bg-gray-900/90 print:bg-transparent print:static print:inset-auto">
+                    {/* Setup Panel (Hidden on Print) */}
+                    <div className="w-80 bg-white p-6 overflow-y-auto print-hidden flex flex-col shadow-2xl z-10 border-r">
                         <div className="flex justify-between items-center mb-6">
-                            <h2 className="font-bold text-xl text-gray-800">ตั้งค่าก่อนพิมพ์</h2>
+                            <h2 className="font-bold text-xl text-gray-800">ตั้งค่าก่อนพิมพ์รายงาน</h2>
                             <button onClick={onClose} className="p-2 bg-gray-100 hover:bg-red-100 hover:text-red-600 rounded-full transition"><X size={20}/></button>
                         </div>
                         <div className="space-y-4 flex-1">
-                            <div><label className="block text-xs font-bold text-gray-600 mb-1">วันที่รายงาน</label><input type="text" value={reportDate} onChange={e=>setReportDate(e.target.value)} className="w-full p-2 border rounded focus:ring-2 focus:ring-blue-500 outline-none text-sm"/></div>
+                            <div className="bg-blue-50 p-3 rounded-lg text-sm text-blue-800 mb-2 border border-blue-100">
+                                <span className="font-bold">รายงาน:</span> {reportTypeLabel} <br/>
+                                <span className="font-bold">ช่วงวันที่:</span> {dateRangeLabel}
+                            </div>
+                            <div><label className="block text-xs font-bold text-gray-600 mb-1">วันที่ออกรายงาน</label><input type="text" value={printDate} onChange={e=>setPrintDate(e.target.value)} className="w-full p-2 border rounded focus:ring-2 focus:ring-blue-500 outline-none text-sm"/></div>
                             <div><label className="block text-xs font-bold text-gray-600 mb-1">ชื่อผู้รายงาน</label><input type="text" value={reporterName} onChange={e=>setReporterName(e.target.value)} className="w-full p-2 border rounded focus:ring-2 focus:ring-blue-500 outline-none text-sm"/></div>
                             <div><label className="block text-xs font-bold text-gray-600 mb-1">ชื่อผู้จัดการร้าน</label><input type="text" value={managerName} onChange={e=>setManagerName(e.target.value)} className="w-full p-2 border rounded focus:ring-2 focus:ring-blue-500 outline-none text-sm"/></div>
                             <div><label className="block text-xs font-bold text-gray-600 mb-1">ชื่อครูสหกรณ์ (กรรมการ)</label><input type="text" value={coopTeacherName} onChange={e=>setCoopTeacherName(e.target.value)} className="w-full p-2 border rounded focus:ring-2 focus:ring-blue-500 outline-none text-sm"/></div>
                             <div><label className="block text-xs font-bold text-gray-600 mb-1">ชื่อผู้อำนวยการโรงเรียน</label><input type="text" value={directorName} onChange={e=>setDirectorName(e.target.value)} className="w-full p-2 border rounded focus:ring-2 focus:ring-blue-500 outline-none text-sm"/></div>
-                            <div className="p-4 bg-blue-50 rounded-lg border border-blue-100 text-xs text-blue-800">
-                                <p className="font-bold mb-1 flex items-center gap-1"><Printer size={14}/> คำแนะนำการพิมพ์:</p>
+                            
+                            <div className="p-4 bg-gray-100 rounded-lg border border-gray-200 text-xs text-gray-700">
+                                <p className="font-bold mb-1 flex items-center gap-1"><Printer size={14}/> คำแนะนำการตั้งค่าในหน้า Print:</p>
                                 <ul className="list-disc pl-4 space-y-1">
-                                    <li>เลือกขนาดกระดาษ: <b>A4</b></li>
-                                    <li>ระยะขอบ (Margins): <b>ค่าเริ่มต้น (Default)</b> หรือ <b>กำหนดเอง</b></li>
-                                    <li><b>เปิดใช้งาน</b> ส่วนหัวและท้ายกระดาษ (Headers and footers) เพื่อให้มีเลขหน้าแสดง</li>
-                                    <li><b>เปิดใช้งาน</b> กราฟิกพื้นหลัง (Background graphics) เพื่อความสวยงาม</li>
+                                    <li>กระดาษ: <b>A4</b></li>
+                                    <li>การวางแนว: <b>แนวตั้ง (Portrait)</b></li>
+                                    <li>ระยะขอบ: <b>ค่าเริ่มต้น (Default)</b></li>
+                                    <li><b>เปิดใช้งาน</b> Headers and footers (เพื่อแสดงเลขหน้า)</li>
+                                    <li><b>เปิดใช้งาน</b> Background graphics (เพื่อแสดงสีพื้นหลังตาราง)</li>
                                 </ul>
                             </div>
                         </div>
                         <button onClick={() => window.print()} className="w-full bg-blue-600 text-white font-bold py-3 rounded-xl mt-4 hover:bg-blue-700 transition shadow-lg flex items-center justify-center gap-2">
-                            <Printer size={20}/> สั่งพิมพ์รายงาน
+                            <Printer size={20}/> สั่งพิมพ์รายงาน A4
                         </button>
                     </div>
 
-                    <div className="flex-1 overflow-y-auto bg-gray-200 p-8 print:p-0 print:bg-white print:overflow-visible flex justify-center items-start">
-                        <div id="printable-report" className="bg-white p-10 w-[210mm] min-h-[297mm] shadow-2xl print:shadow-none print:w-full print:p-0 print:min-h-0 mx-auto text-sm text-gray-900 font-sans">
+                    {/* Printable Area (Visible on Print) */}
+                    <div className="flex-1 overflow-y-auto bg-gray-200 p-8 print:p-0 print:bg-transparent print:overflow-visible flex justify-center items-start">
+                        <div className="bg-white px-10 pt-10 pb-4 w-[210mm] min-h-[297mm] shadow-2xl print:shadow-none print:w-full print:p-0 print:min-h-0 mx-auto text-sm text-black font-sans relative">
                             
-                            <table className="w-full print-table print-no-border border-collapse">
-                                <thead>
+                            {/* ใช้ Table เพื่อให้ Header และ Footer (ลายเซ็น) ปรากฏทุกหน้า */}
+                            <table className="report-container w-full border-collapse">
+                                <thead className="report-header">
                                     <tr>
-                                        <td className="pb-6 pt-2">
-                                            <div className="flex flex-col items-center justify-center border-b-2 border-gray-800 pb-4 mb-2">
+                                        <td className="pb-6">
+                                            <div className="flex flex-col items-center justify-center border-b-2 border-black pb-4">
                                                 {settings.coopLogo && <img src={settings.coopLogo} className="h-20 w-20 object-contain mb-3"/>}
-                                                <h1 className="text-2xl font-bold text-center leading-tight">{settings.coopName || "สหกรณ์โรงเรียน"}</h1>
-                                                <p className="text-gray-600 mt-1">รายงานสรุปผลประกอบการและสถานะการเงิน</p>
-                                                <p className="text-gray-600">ข้อมูล ณ วันที่ {reportDate}</p>
+                                                <h1 className="text-2xl font-bold text-center leading-tight mb-1">{settings.coopName || "สหกรณ์โรงเรียน"}</h1>
+                                                <p className="text-lg font-bold">รายงานสรุปผลประกอบการและสถิติการขาย</p>
+                                                <p className="text-md mt-1">ประเภทรายงาน: {reportTypeLabel}</p>
+                                                <p className="text-sm">ประจำช่วงวันที่ {dateRangeLabel}</p>
                                             </div>
                                         </td>
                                     </tr>
@@ -1753,90 +1875,107 @@
                                 <tbody>
                                     <tr>
                                         <td>
-                                            <div className="mb-6">
-                                                <h3 className="font-bold text-lg mb-3 bg-gray-100 p-2 border-l-4 border-blue-600">1. สรุปผลการดำเนินงาน (ภาพรวม)</h3>
-                                                <div className="grid grid-cols-2 gap-4 mb-4">
-                                                    <div className="border border-gray-300 p-3 rounded">
-                                                        <p className="text-xs text-gray-500">ยอดขายทั้งหมด (ยอดรับเข้า)</p>
-                                                        <p className="text-xl font-bold">฿{totalSales.toLocaleString('th-TH')}</p>
-                                                    </div>
-                                                    <div className="border border-gray-300 p-3 rounded">
-                                                        <p className="text-xs text-gray-500">ต้นทุนขายทั้งหมด (รวมทุนสินค้า)</p>
-                                                        <p className="text-xl font-bold">฿{grossProfit >= 0 ? (totalSales - grossProfit).toLocaleString('th-TH') : "0"}</p>
-                                                    </div>
-                                                    <div className="border border-gray-300 p-3 rounded bg-blue-50">
-                                                        <p className="text-xs text-gray-500">กำไรเบื้องต้น (หักต้นทุน)</p>
-                                                        <p className="text-xl font-bold text-blue-800">฿{grossProfit.toLocaleString('th-TH', {minimumFractionDigits:2})}</p>
-                                                    </div>
-                                                    <div className={`border border-gray-300 p-3 rounded ${netProfit >= 0 ? 'bg-green-50' : 'bg-red-50'}`}>
-                                                        <p className="text-xs text-gray-500">กำไรสุทธิ (หลังหักยอดปันผลสมาชิก)</p>
-                                                        <p className={`text-xl font-bold ${netProfit >= 0 ? 'text-green-800' : 'text-red-800'}`}>฿{netProfit.toLocaleString('th-TH', {minimumFractionDigits:2})}</p>
-                                                    </div>
-                                                </div>
-                                            </div>
-
-                                            <div className="mb-6">
-                                                <h3 className="font-bold text-lg mb-3 bg-gray-100 p-2 border-l-4 border-purple-600">2. สถานะสภาพคล่องและทุนเรือนหุ้น</h3>
-                                                <table className="w-full text-sm border-collapse">
+                                            {/* เนื้อหารายงาน */}
+                                            <div className="mb-6 avoid-break">
+                                                <h3 className="font-bold text-lg mb-3 bg-gray-100 p-2 border-l-4 border-gray-600">1. สรุปผลการดำเนินงาน (ภาพรวม)</h3>
+                                                <table className="w-full text-sm print-table mb-2">
                                                     <tbody>
-                                                        <tr className="border-b"><td className="py-2 text-gray-600">ทุนเรือนหุ้น (ตั้งต้นจากสมาชิก)</td><td className="py-2 text-right font-bold">฿{totalShareCapital.toLocaleString('th-TH')}</td></tr>
-                                                        <tr className="border-b"><td className="py-2 text-gray-600">รายการเบิกจ่าย/ซื้อของเข้าร้าน (รวม)</td><td className="py-2 text-right font-bold text-red-600">- ฿{totalExpensesCash.toLocaleString('th-TH')}</td></tr>
-                                                        <tr className="border-b"><td className="py-2 text-gray-600">ยอดรวมเตรียมจ่ายคืนสมาชิก (ปันผล+เฉลี่ยคืน)</td><td className="py-2 text-right font-bold text-purple-700">฿{totalPayout.toLocaleString('th-TH', {minimumFractionDigits:2})}</td></tr>
-                                                        <tr className="border-b"><td className="py-3 text-lg font-bold">เงินสดหมุนเวียนคงเหลือ (ในระบบ)</td><td className="py-3 text-right font-black text-xl text-indigo-700">฿{availableCashFlow.toLocaleString('th-TH')}</td></tr>
+                                                        <tr>
+                                                            <td className="w-2/3 bg-gray-50">ยอดขายทั้งหมด (จากยอดที่บันทึก)</td>
+                                                            <td className="w-1/3 text-right font-bold">฿{totalSales.toLocaleString('th-TH')}</td>
+                                                        </tr>
+                                                        <tr>
+                                                            <td className="bg-gray-50">ต้นทุนสินค้าที่ขายไป</td>
+                                                            <td className="text-right">฿{totalCost.toLocaleString('th-TH')}</td>
+                                                        </tr>
+                                                        <tr>
+                                                            <td className="bg-gray-100 font-bold">กำไรเบื้องต้น (หักต้นทุนสินค้า)</td>
+                                                            <td className="text-right font-bold">฿{grossProfit.toLocaleString('th-TH')}</td>
+                                                        </tr>
                                                     </tbody>
                                                 </table>
                                             </div>
 
-                                            <div className="mb-8">
-                                                <h3 className="font-bold text-lg mb-3 bg-gray-100 p-2 border-l-4 border-yellow-500">3. สรุปสินค้าขายดี 5 อันดับแรก</h3>
-                                                <table className="w-full text-sm border border-gray-300 border-collapse">
-                                                    <thead className="bg-gray-100 border-b border-gray-300">
-                                                        <tr><th className="py-2 px-3 text-left border-r border-gray-300">อันดับ</th><th className="py-2 px-3 text-left border-r border-gray-300">ชื่อสินค้า</th><th className="py-2 px-3 text-center border-r border-gray-300">หมวดหมู่</th><th className="py-2 px-3 text-right">จำนวนขาย (ชิ้น)</th></tr>
+                                            <div className="mb-6 avoid-break">
+                                                <h3 className="font-bold text-lg mb-3 bg-gray-100 p-2 border-l-4 border-gray-600">2. สรุปรายจ่ายและสภาพคล่องลิ้นชัก</h3>
+                                                <table className="w-full text-sm print-table mb-2">
+                                                    <tbody>
+                                                        <tr>
+                                                            <td className="w-2/3 bg-gray-50">รายจ่ายที่บันทึกในช่วงเวลานี้ (ซื้อของ/ยืม)</td>
+                                                            <td className="w-1/3 text-right font-bold text-red-600">฿{actualExpenses.toLocaleString('th-TH')}</td>
+                                                        </tr>
+                                                        <tr className="bg-gray-100 font-bold border-t-2">
+                                                            <td className="py-2">ยอดเงินได้สุทธิประจำงวด (ยอดขาย - รายจ่าย)</td>
+                                                            <td className="text-right py-2">฿{(totalSales - actualExpenses).toLocaleString('th-TH')}</td>
+                                                        </tr>
+                                                    </tbody>
+                                                </table>
+                                            </div>
+
+                                            <div className="mb-6 avoid-break">
+                                                <h3 className="font-bold text-lg mb-3 bg-gray-100 p-2 border-l-4 border-gray-600">3. สรุปข้อมูลสมาชิกและการปันผลสมมติฐาน</h3>
+                                                <p className="text-xs text-gray-500 mb-2 italic">*การคำนวณปันผล/เฉลี่ยคืน คำนวณจากยอดสะสมทั้งหมดตั้งแต่ต้น ไม่ใช่เฉพาะช่วงเวลาที่เลือกรายงาน</p>
+                                                <table className="w-full text-sm print-table mb-2">
+                                                    <tbody>
+                                                        <tr><td className="w-2/3 bg-gray-50">ทุนเรือนหุ้นทั้งหมด</td><td className="w-1/3 text-right font-bold">฿{totalShareCapital.toLocaleString('th-TH')}</td></tr>
+                                                        <tr><td className="bg-gray-50">สิทธิ์ปันผลที่ต้องจ่าย ({settings.dividendRate}%)</td><td className="text-right">฿{(members.reduce((sum,m)=>sum+(Number(m.shares||0)*settings.sharePrice),0) * (settings.dividendRate/100)).toLocaleString('th-TH',{minimumFractionDigits:2})}</td></tr>
+                                                        <tr><td className="bg-gray-50">สิทธิ์เฉลี่ยคืนที่ต้องจ่าย ({settings.refundRate}%)</td><td className="text-right">฿{(members.reduce((sum,m)=>sum+Number(m.totalSpent||0),0) * (settings.refundRate/100)).toLocaleString('th-TH',{minimumFractionDigits:2})}</td></tr>
+                                                        <tr className="bg-gray-100 font-bold border-t-2"><td className="py-2">รวมต้องจ่ายคืนสมาชิกทั้งสิ้น</td><td className="text-right py-2">฿{totalPayout.toLocaleString('th-TH',{minimumFractionDigits:2})}</td></tr>
+                                                    </tbody>
+                                                </table>
+                                            </div>
+
+                                            <div className="mb-8 avoid-break">
+                                                <h3 className="font-bold text-lg mb-3 bg-gray-100 p-2 border-l-4 border-gray-600">4. สรุปสินค้าขายดี 5 อันดับแรก (ในช่วงเวลา)</h3>
+                                                <table className="w-full text-sm print-table text-center">
+                                                    <thead className="bg-gray-100 font-bold">
+                                                        <tr><td className="w-16">อันดับ</td><td className="text-left">ชื่อสินค้า</td><td className="w-32">หมวดหมู่</td><td className="w-32 text-right">จำนวน (ชิ้น)</td></tr>
                                                     </thead>
                                                     <tbody>
-                                                        {topProducts.length === 0 ? <tr><td colSpan="4" className="text-center py-4">ไม่มีข้อมูลการขาย</td></tr> : 
+                                                        {topProducts.length === 0 ? <tr><td colSpan="4" className="py-4">ไม่มีข้อมูลการขายในช่วงเวลานี้</td></tr> : 
                                                         topProducts.map((p, i) => (
-                                                            <tr key={p.id} className="border-b border-gray-200">
-                                                                <td className="py-2 px-3 border-r border-gray-300 text-center">{i+1}</td>
-                                                                <td className="py-2 px-3 border-r border-gray-300 font-medium">{p.name}</td>
-                                                                <td className="py-2 px-3 border-r border-gray-300 text-center">{p.category}</td>
-                                                                <td className="py-2 px-3 text-right font-bold text-green-700">{p.soldQty}</td>
+                                                            <tr key={p.id}>
+                                                                <td>{i+1}</td><td className="text-left">{p.name}</td><td>{p.category}</td><td className="text-right font-bold">{p.soldQty}</td>
                                                             </tr>
                                                         ))}
                                                     </tbody>
                                                 </table>
                                             </div>
-                                            
-                                            <div className="h-8"></div>
+
+                                            <div className="h-4"></div> {/* Spacer */}
                                         </td>
                                     </tr>
                                 </tbody>
 
-                                <tfoot>
+                                <tfoot className="report-footer">
                                     <tr>
                                         <td>
-                                            <div className="pt-10 mt-10 border-t-2 border-gray-300 text-sm font-medium">
-                                                <div className="grid grid-cols-2 gap-x-8 gap-y-16 text-center">
+                                            <div className="pt-8 mt-4 border-t border-black text-sm font-medium">
+                                                <div className="grid grid-cols-2 gap-x-8 gap-y-12 text-center items-end h-[160px]">
                                                     <div>
                                                         <p>ลงชื่อ......................................................ผู้รายงาน</p>
-                                                        <p className="mt-3">({reporterName ? reporterName : '......................................................'})</p>
+                                                        <p className="mt-2">({reporterName ? reporterName : '......................................................'})</p>
+                                                        <p className="mt-1 text-xs text-gray-500">วันที่: {printDate}</p>
                                                     </div>
                                                     <div>
                                                         <p>ลงชื่อ......................................................ผู้จัดการร้าน</p>
-                                                        <p className="mt-3">({managerName ? managerName : '......................................................'})</p>
+                                                        <p className="mt-2">({managerName ? managerName : '......................................................'})</p>
+                                                        <p className="mt-1 text-xs text-gray-500">วันที่: {printDate}</p>
                                                     </div>
                                                     <div>
                                                         <p>ลงชื่อ......................................................ครูสหกรณ์</p>
-                                                        <p className="mt-3">({coopTeacherName ? coopTeacherName : '......................................................'})</p>
+                                                        <p className="mt-2">({coopTeacherName ? coopTeacherName : '......................................................'})</p>
+                                                        <p className="mt-1 text-xs text-gray-500">วันที่: {printDate}</p>
                                                     </div>
                                                     <div>
                                                         <p>ลงชื่อ......................................................ผู้อำนวยการโรงเรียน</p>
-                                                        <p className="mt-3">({directorName ? directorName : '......................................................'})</p>
-                                                        <p className="mt-2 text-xs text-gray-500">รับทราบ</p>
+                                                        <p className="mt-2">({directorName ? directorName : '......................................................'})</p>
+                                                        <p className="mt-1 font-bold">รับทราบ</p>
+                                                        <p className="mt-1 text-xs text-gray-500">วันที่: {printDate}</p>
                                                     </div>
                                                 </div>
-                                                <div className="text-center mt-8 text-gray-500 text-xs">
-                                                    วันที่พิมพ์รายงาน: {reportDate}
+                                                <div className="text-right mt-6 text-gray-400 text-[10px] italic">
+                                                    รายงานสร้างโดยระบบสหกรณ์โรงเรียน
                                                 </div>
                                             </div>
                                         </td>
@@ -1852,25 +1991,95 @@
 
         function Reports({ sales, products, members, settings, expenses }) {
             const [showPrintModal, setShowPrintModal] = useState(false);
-
-            const productSalesCount = {};
-            let totalSales = 0;
-            let totalCost = 0;
             
-            sales.forEach(sale => {
+            // Filter States
+            const [filterType, setFilterType] = useState('all'); // all, daily, weekly, monthly, semester, yearly
+            const [filterDateStr, setFilterDateStr] = useState(new Date().toISOString().split('T')[0]); // YYYY-MM-DD format for input
+
+            // ฟังก์ชันกรองข้อมูล
+            const getFilteredData = () => {
+                let filteredSales = sales;
+                let filteredExpenses = expenses;
+                let reportTypeLabel = "ทั้งหมดตั้งแต่เริ่มใช้งาน";
+                let dateRangeLabel = "ข้อมูลทั้งหมด";
+
+                const targetDate = new Date(filterDateStr);
+                const tYear = targetDate.getFullYear();
+                const tMonth = targetDate.getMonth();
+                const tDate = targetDate.getDate();
+
+                if (filterType !== 'all') {
+                    filteredSales = sales.filter(s => {
+                        const d = parseThaiDate(s.date);
+                        if (filterType === 'daily') return d.getFullYear() === tYear && d.getMonth() === tMonth && d.getDate() === tDate;
+                        if (filterType === 'monthly') return d.getFullYear() === tYear && d.getMonth() === tMonth;
+                        if (filterType === 'yearly') return d.getFullYear() === tYear; // แบบปีปฏิทิน
+                        // กรณี weekly, semester อาจต้องเขียน logic เพิ่มเติมที่ซับซ้อนขึ้น ในที่นี้ใช้ monthly คลุมไปก่อนสำหรับการสาธิต
+                        if (filterType === 'weekly') {
+                            const diff = Math.abs(d.getTime() - targetDate.getTime());
+                            const daysDiff = Math.ceil(diff / (1000 * 3600 * 24)); 
+                            return daysDiff <= 7 && d.getTime() <= targetDate.getTime();
+                        }
+                        if (filterType === 'semester') {
+                             // สมมติเทอม 1 คือ พ.ค. - ต.ค., เทอม 2 คือ พ.ย. - เม.ย.
+                             const isTerm1 = tMonth >= 4 && tMonth <= 9;
+                             const sIsTerm1 = d.getMonth() >= 4 && d.getMonth() <= 9;
+                             return d.getFullYear() === tYear && isTerm1 === sIsTerm1;
+                        }
+                        return true;
+                    });
+                    
+                    filteredExpenses = expenses.filter(e => {
+                        const d = parseThaiDate(e.date);
+                        if (filterType === 'daily') return d.getFullYear() === tYear && d.getMonth() === tMonth && d.getDate() === tDate;
+                        if (filterType === 'monthly') return d.getFullYear() === tYear && d.getMonth() === tMonth;
+                        if (filterType === 'yearly') return d.getFullYear() === tYear;
+                        if (filterType === 'weekly') {
+                            const diff = Math.abs(d.getTime() - targetDate.getTime());
+                            const daysDiff = Math.ceil(diff / (1000 * 3600 * 24)); 
+                            return daysDiff <= 7 && d.getTime() <= targetDate.getTime();
+                        }
+                        if (filterType === 'semester') {
+                             const isTerm1 = tMonth >= 4 && tMonth <= 9;
+                             const sIsTerm1 = d.getMonth() >= 4 && d.getMonth() <= 9;
+                             return d.getFullYear() === tYear && isTerm1 === sIsTerm1;
+                        }
+                        return true;
+                    });
+
+                    // Set Labels
+                    const thMonths = ["ม.ค.", "ก.พ.", "มี.ค.", "เม.ย.", "พ.ค.", "มิ.ย.", "ก.ค.", "ส.ค.", "ก.ย.", "ต.ค.", "พ.ย.", "ธ.ค."];
+                    if (filterType === 'daily') { reportTypeLabel = "รายวัน"; dateRangeLabel = `${tDate} ${thMonths[tMonth]} ${tYear+543}`; }
+                    if (filterType === 'weekly') { reportTypeLabel = "รายสัปดาห์ (ย้อนหลัง 7 วัน)"; dateRangeLabel = `ถึงวันที่ ${tDate} ${thMonths[tMonth]} ${tYear+543}`; }
+                    if (filterType === 'monthly') { reportTypeLabel = "รายเดือน"; dateRangeLabel = `เดือน ${thMonths[tMonth]} ${tYear+543}`; }
+                    if (filterType === 'semester') { reportTypeLabel = "รายภาคเรียน"; dateRangeLabel = `ภาคเรียนที่ ${tMonth>=4&&tMonth<=9?'1':'2'} ปี ${tYear+543}`; }
+                    if (filterType === 'yearly') { reportTypeLabel = "รายปี"; dateRangeLabel = `ประจำปี ${tYear+543}`; }
+                }
+
+                return { filteredSales, filteredExpenses, reportTypeLabel, dateRangeLabel };
+            };
+
+            const { filteredSales, filteredExpenses, reportTypeLabel, dateRangeLabel } = getFilteredData();
+
+            // Calculate Metrics based on FILTERED data
+            const productSalesCount = {};
+            let totalSales = 0; let totalCost = 0;
+            
+            filteredSales.forEach(sale => {
                 totalSales += Number(sale.total||0);
                 if(Array.isArray(sale.items)){
-                sale.items.forEach(item => {
-                    productSalesCount[item.id] = (productSalesCount[item.id] || 0) + Number(item.qty||0);
-                    totalCost += (Number(item.cost||0) * Number(item.qty||0));
-                });
+                    sale.items.forEach(item => {
+                        productSalesCount[item.id] = (productSalesCount[item.id] || 0) + Number(item.qty||0);
+                        totalCost += (Number(item.cost||0) * Number(item.qty||0));
+                    });
                 }
             });
 
             const grossProfit = totalSales - totalCost;
 
-            let totalPayout = 0;
-            let totalShareCapital = 0;
+            // Share Capital & Payout calculations remain global (not filtered by date) 
+            // as they represent the current absolute state of members
+            let totalPayout = 0; let totalShareCapital = 0;
             members.forEach(m => {
                 const shareValue = Number(m.shares||0) * Number(settings.sharePrice||0);
                 totalShareCapital += shareValue;
@@ -1879,10 +2088,9 @@
                 totalPayout += (dividend + refund);
             });
 
-            const netProfit = grossProfit - totalPayout;
-            const totalExpensesCash = expenses.reduce((sum, e) => sum + Number(e.amount||0), 0);
-            const availableCashFlow = totalShareCapital + totalSales - totalExpensesCash;
-
+            const netProfit = grossProfit - totalPayout; // Note: Net profit here mixes timeframe gross with all-time payout expectations
+            const totalExpensesCash = filteredExpenses.reduce((sum, e) => sum + Number(e.amount||0), 0);
+            
             const topProducts = Object.entries(productSalesCount).map(([id, qty]) => ({ ...products.find(p => String(p.id) === String(id)), soldQty: qty })).sort((a, b) => b.soldQty - a.soldQty).slice(0, 5);
 
             return (
@@ -1895,40 +2103,44 @@
                     </button>
                 </div>
 
+                {/* Filter Bar */}
+                <div className="bg-white p-4 rounded-xl shadow-sm border border-gray-100 flex flex-col md:flex-row gap-4 items-center">
+                    <div className="flex items-center gap-2 text-gray-600 font-medium whitespace-nowrap">
+                        <Calendar size={20}/> กรองข้อมูลรายงาน:
+                    </div>
+                    <select value={filterType} onChange={e=>setFilterType(e.target.value)} className="p-2 border border-gray-300 rounded-lg outline-none focus:border-blue-500 min-w-[150px]">
+                        <option value="all">ทั้งหมดตั้งแต่เปิดใช้</option>
+                        <option value="daily">รายวัน (เลือกวัน)</option>
+                        <option value="weekly">รายสัปดาห์</option>
+                        <option value="monthly">รายเดือน</option>
+                        <option value="semester">รายเทอม (ภาคเรียน)</option>
+                        <option value="yearly">รายปีการศึกษา</option>
+                    </select>
+                    {filterType !== 'all' && (
+                        <input type="date" value={filterDateStr} onChange={e=>setFilterDateStr(e.target.value)} className="p-2 border border-gray-300 rounded-lg outline-none focus:border-blue-500"/>
+                    )}
+                    <div className="md:ml-auto text-sm text-gray-500 font-medium bg-gray-50 px-3 py-1.5 rounded-lg border">
+                        แสดงข้อมูล: {dateRangeLabel}
+                    </div>
+                </div>
+
                 <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6">
-                    <h3 className="text-lg font-bold text-gray-800 mb-6 flex items-center gap-2"><Wallet className="text-indigo-500" /> สรุปผลประกอบการสหกรณ์ (ภาพรวม)</h3>
+                    <h3 className="text-lg font-bold text-gray-800 mb-6 flex items-center gap-2"><Wallet className="text-indigo-500" /> สรุปผลประกอบการ ({reportTypeLabel})</h3>
                     
                     <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4">
-                    <div className="bg-orange-50 border border-orange-200 rounded-xl p-5 relative overflow-hidden">
-                        <p className="text-sm text-orange-700 font-bold mb-1 relative z-10">ทุนเรือนหุ้น (เงินต้นจากสมาชิก)</p>
-                        <p className="text-2xl font-black text-orange-800 relative z-10">฿{totalShareCapital.toLocaleString('th-TH', {minimumFractionDigits: 2, maximumFractionDigits: 2})}</p>
+                    <div className="bg-gray-50 border border-gray-200 rounded-xl p-5 relative overflow-hidden">
+                        <p className="text-sm text-gray-700 font-bold mb-1 relative z-10">ยอดขายรวมในช่วงเวลา</p>
+                        <p className="text-2xl font-black text-gray-800 relative z-10">฿{totalSales.toLocaleString('th-TH')}</p>
+                        <p className="text-xs text-gray-500 mt-1">{filteredSales.length} รายการขาย</p>
                     </div>
                     <div className="bg-blue-50 border border-blue-200 rounded-xl p-5 relative overflow-hidden">
-                        <p className="text-sm text-blue-700 font-bold mb-1 relative z-10">กำไรเบื้องต้น (หักต้นทุนสินค้า)</p>
-                        <p className="text-2xl font-black text-blue-800 relative z-10">฿{grossProfit.toLocaleString('th-TH', {minimumFractionDigits: 2, maximumFractionDigits: 2})}</p>
+                        <p className="text-sm text-blue-700 font-bold mb-1 relative z-10">กำไรเบื้องต้น (หักทุน)</p>
+                        <p className="text-2xl font-black text-blue-800 relative z-10">฿{grossProfit.toLocaleString('th-TH', {minimumFractionDigits: 2})}</p>
                     </div>
-                    <div className={`border rounded-xl p-5 relative overflow-hidden ${netProfit >= 0 ? 'bg-green-50 border-green-200' : 'bg-red-50 border-red-200'}`}>
-                        <p className={`text-sm font-bold mb-1 relative z-10 ${netProfit >= 0 ? 'text-green-700' : 'text-red-700'}`}>กำไรสุทธิ (หลังหักปันผล/เฉลี่ยคืน)</p>
-                        <p className={`text-3xl font-black relative z-10 ${netProfit >= 0 ? 'text-green-800' : 'text-red-800'}`}>฿{netProfit.toLocaleString('th-TH', {minimumFractionDigits: 2, maximumFractionDigits: 2})}</p>
-                    </div>
-                    </div>
-
-                    <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-4">
-                    <div className="bg-gray-50 border border-gray-200 rounded-xl p-4 text-center">
-                        <p className="text-xs text-gray-500 font-bold">ยอดขายทั้งหมด</p>
-                        <p className="text-lg font-black text-gray-800">฿{totalSales.toLocaleString('th-TH')}</p>
-                    </div>
-                    <div className="bg-gray-50 border border-gray-200 rounded-xl p-4 text-center">
-                        <p className="text-xs text-gray-500 font-bold">รายจ่าย/ซื้อของ/เบิก</p>
-                        <p className="text-lg font-black text-red-600">- ฿{totalExpensesCash.toLocaleString('th-TH')}</p>
-                    </div>
-                    <div className="bg-purple-50 border border-purple-200 rounded-xl p-4 text-center">
-                        <p className="text-xs text-purple-700 font-bold">เตรียมจ่ายคืนสมาชิก</p>
-                        <p className="text-lg font-black text-purple-800">฿{totalPayout.toLocaleString('th-TH')}</p>
-                    </div>
-                    <div className="bg-indigo-50 border border-indigo-200 rounded-xl p-4 text-center shadow-inner">
-                        <p className="text-xs text-indigo-700 font-bold">เงินสดหมุนเวียนคงเหลือ</p>
-                        <p className="text-xl font-black text-indigo-800">฿{availableCashFlow.toLocaleString('th-TH')}</p>
+                    <div className="bg-red-50 border border-red-200 rounded-xl p-5 relative overflow-hidden">
+                        <p className="text-sm text-red-700 font-bold mb-1 relative z-10">รายจ่ายในช่วงเวลา</p>
+                        <p className="text-2xl font-black text-red-800 relative z-10">- ฿{totalExpensesCash.toLocaleString('th-TH')}</p>
+                        <p className="text-xs text-red-500 mt-1">{filteredExpenses.length} รายการจ่าย</p>
                     </div>
                     </div>
                 </div>
@@ -1945,29 +2157,28 @@
                             <div className="text-right shrink-0"><p className="font-bold text-green-600 bg-green-50 px-2 py-1 rounded-lg text-sm">{p.soldQty} ชิ้น</p></div>
                         </div>
                         ))}
-                        {topProducts.length === 0 && <p className="text-center text-gray-400 py-8">ยังไม่มีข้อมูลการขายในขณะนี้</p>}
+                        {topProducts.length === 0 && <p className="text-center text-gray-400 py-8">ไม่มีข้อมูลการขายในช่วงเวลานี้</p>}
                     </div>
                     </div>
                     <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6">
-                    <h3 className="text-lg font-bold text-gray-800 mb-4">ประวัติการขายล่าสุด</h3>
-                    <div className="space-y-3">
-                        {sales.slice().reverse().map((sale, i) => (
+                    <h3 className="text-lg font-bold text-gray-800 mb-4">ประวัติการขายล่าสุด ({filteredSales.length})</h3>
+                    <div className="space-y-3 max-h-[300px] overflow-y-auto custom-scrollbar pr-2">
+                        {filteredSales.slice().reverse().map((sale, i) => (
                         <div key={i} className="p-3 border border-gray-100 rounded-lg flex justify-between items-center hover:bg-gray-50 shadow-sm">
                             <div><p className="font-bold text-sm text-gray-800 flex items-center gap-2">{sale.id}</p><p className="text-xs text-gray-500 mt-0.5">{sale.date}</p></div>
                             <div className="text-right"><p className="font-black text-green-600">฿{Number(sale.total||0).toLocaleString()}</p><p className="text-xs text-gray-500">{Array.isArray(sale.items) ? sale.items.length : 0} รายการ</p></div>
                         </div>
                         ))}
-                        {sales.length === 0 && <p className="text-center text-gray-400 py-8">ยังไม่มีการขายเกิดขึ้นในวันนี้</p>}
+                        {filteredSales.length === 0 && <p className="text-center text-gray-400 py-8">ไม่มีการขายเกิดขึ้นในช่วงนี้</p>}
                     </div>
                     </div>
                 </div>
 
                 {showPrintModal && (
                     <PrintReportModal 
-                        sales={sales} products={products} members={members} settings={settings} expenses={expenses} 
+                        sales={filteredSales} products={products} members={members} settings={settings} expenses={filteredExpenses} 
                         onClose={() => setShowPrintModal(false)}
-                        totalShareCapital={totalShareCapital} grossProfit={grossProfit} totalPayout={totalPayout} netProfit={netProfit} 
-                        totalSales={totalSales} totalExpensesCash={totalExpensesCash} availableCashFlow={availableCashFlow} topProducts={topProducts}
+                        reportTypeLabel={reportTypeLabel} dateRangeLabel={dateRangeLabel}
                     />
                 )}
                 </div>
