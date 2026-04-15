@@ -28,22 +28,31 @@
         .custom-scrollbar::-webkit-scrollbar-thumb:hover { background: #94a3b8; }
         body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; }
         
-        /* สไตล์เฉพาะสำหรับการพิมพ์ A4 */
+        /* สไตล์เฉพาะสำหรับการพิมพ์ A4 (แก้ไขปัญหาพรินต์แล้วจอขาว) */
         @media print {
-            .print-hidden { display: none !important; }
-            .print-only { display: block !important; }
+            body * {
+                visibility: hidden; 
+            }
+            #printable-report, #printable-report * {
+                visibility: visible; 
+            }
+            #printable-report {
+                position: absolute;
+                left: 0;
+                top: 0;
+                width: 100%;
+                margin: 0;
+                padding: 0;
+                box-shadow: none !important;
+            }
             @page { 
                 size: A4 portrait; 
                 margin: 15mm; 
             }
-            body { background-color: white; margin: 0; padding: 0; }
             .print-table { width: 100%; border-collapse: collapse; }
             .print-table th, .print-table td { border: 1px solid #e5e7eb; padding: 8px; }
             .print-no-border th, .print-no-border td { border: none !important; padding: 0; }
-            /* ป้องกันตารางขาดครึ่งเวลาขึ้นหน้าใหม่ */
             tr { page-break-inside: avoid; }
-            /* กำหนดให้หน้าต่างพิมพ์ใช้ความกว้างเต็มที่ */
-            .print-container { width: 100% !important; max-width: none !important; padding: 0 !important; margin: 0 !important; box-shadow: none !important;}
         }
     </style>
 </head>
@@ -94,20 +103,24 @@
         const FileImage = (p) => <Icon name="image" {...p} />;
         const Loader2 = (p) => <Icon name="spinner" className={`animate-spin ${p.className||''}`} {...p} />;
         const ArrowsClockwise = (p) => <Icon name="arrows-clockwise" {...p} />;
+        const CheckSquare = (p) => <Icon name="check-square" {...p} />;
+        const Square = (p) => <Icon name="square" {...p} />;
         const Money = (p) => <Icon name="money" {...p} />;
         const Calendar = (p) => <Icon name="calendar-blank" {...p} />;
+        const Gift = (p) => <Icon name="gift" {...p} />;
 
         const getGradeWeight = (grade) => {
             const weights = { 'อนุบาล 2': 1, 'อนุบาล 3': 2, 'ป.1': 3, 'ป.2': 4, 'ป.3': 5, 'ป.4': 6, 'ป.5': 7, 'ป.6': 8, 'ครู': 99 };
             return weights[String(grade)] || 100;
         };
 
-        // ฟังก์ชันช่วยแปลงวันที่ไทย (dd/mm/yyyy hh:mm:ss) เป็น Date Object
         const parseThaiDate = (dateString) => {
             if (!dateString) return new Date(0);
             try {
                 const [datePart] = String(dateString).split(' ');
+                if (!datePart) return new Date(0);
                 const [d, m, y] = datePart.split('/');
+                if (!d || !m || !y) return new Date(0);
                 const gregorianYear = parseInt(y) > 2500 ? parseInt(y) - 543 : parseInt(y);
                 return new Date(gregorianYear, parseInt(m) - 1, parseInt(d));
             } catch (e) {
@@ -115,6 +128,7 @@
             }
         };
 
+        // --- Error Boundary เพื่อป้องกันหน้าจอขาว ---
         class ErrorBoundary extends React.Component {
             constructor(props) {
                 super(props);
@@ -129,14 +143,14 @@
             render() {
                 if (this.state.hasError) {
                     return (
-                        <div className="h-screen flex flex-col items-center justify-center bg-gray-50 p-6 text-center print-hidden">
+                        <div className="h-screen flex flex-col items-center justify-center bg-gray-50 p-6 text-center">
                             <div className="bg-red-50 text-red-600 p-8 rounded-2xl border border-red-200 shadow-sm max-w-lg">
                                 <AlertCircle size={64} className="mx-auto mb-4 opacity-50" />
                                 <h2 className="text-2xl font-bold mb-2">อ๊ะ! เกิดข้อผิดพลาดบางอย่าง</h2>
-                                <p className="mb-4 text-sm text-red-500 bg-white p-3 rounded border border-red-100 overflow-auto max-h-32">
+                                <p className="mb-4 text-sm text-red-500 bg-white p-3 rounded border border-red-100 overflow-auto max-h-32 text-left">
                                     {this.state.error && this.state.error.toString()}
                                 </p>
-                                <p className="mb-6 text-sm text-gray-600">โปรดรีเฟรชหน้าจอเพื่อเริ่มต้นการทำงานใหม่</p>
+                                <p className="mb-6 text-sm text-gray-600">ไม่ต้องตกใจครับ ระบบได้เปิดโหมดป้องกันไว้แล้ว โปรดรีเฟรชหน้าจอเพื่อเริ่มต้นการทำงานใหม่</p>
                                 <button onClick={() => window.location.reload()} className="bg-red-600 text-white px-6 py-3 rounded-xl font-bold hover:bg-red-700 transition shadow-md">
                                     รีเฟรชหน้าจอ
                                 </button>
@@ -193,12 +207,12 @@
                     const response = await fetch(GAS_URL);
                     const result = await response.json();
                     if (result.status === "success") {
-                        setUsers(result.data.users || []);
-                        setProducts(result.data.products || []);
-                        setMembers(result.data.members || []);
-                        setSales(result.data.sales || []);
-                        setExpenses(result.data.expenses || []);
-                        setLogs(result.data.logs || []);
+                        setUsers(Array.isArray(result.data.users) ? result.data.users : []);
+                        setProducts(Array.isArray(result.data.products) ? result.data.products : []);
+                        setMembers(Array.isArray(result.data.members) ? result.data.members : []);
+                        setSales(Array.isArray(result.data.sales) ? result.data.sales : []);
+                        setExpenses(Array.isArray(result.data.expenses) ? result.data.expenses : []);
+                        setLogs(Array.isArray(result.data.logs) ? result.data.logs : []);
                         setSettings(result.data.settings || { dividendRate: 5, refundRate: 2, sharePrice: 10, coopName: "สหกรณ์โรงเรียน", coopLogo: "" });
                     }
                 } catch (error) {
@@ -225,7 +239,7 @@
             const addLog = (action, details) => {
                 const userName = currentUser ? currentUser.name : (posCashier ? posCashier.name : 'System');
                 const newLog = { id: Date.now(), date: new Date().toLocaleString('th-TH'), user: String(userName), action: action, details: details };
-                const updatedLogs = [newLog, ...logs];
+                const updatedLogs = [newLog, ...(Array.isArray(logs) ? logs : [])];
                 setLogs(updatedLogs);
                 syncToCloud("ADD_LOG", newLog); 
             };
@@ -270,7 +284,7 @@
             };
 
             const handlePosLogout = () => {
-                addLog('ออกจากระบบ POS', `ปิดกะโดย: ${posCashier.name}`);
+                addLog('ออกจากระบบ POS', `ปิดกะโดย: ${posCashier?.name || 'ไม่ทราบชื่อ'}`);
                 setPosCashier(null);
             };
 
@@ -286,12 +300,12 @@
             const addToCart = (product) => {
                 setCart(prevCart => {
                     const existing = prevCart.find(item => item.id === product.id);
-                    if (existing) return prevCart.map(item => item.id === product.id ? { ...item, qty: item.qty + 1 } : item);
+                    if (existing) return prevCart.map(item => item.id === product.id ? { ...item, qty: Number(item.qty || 0) + 1 } : item);
                     return [...prevCart, { ...product, qty: 1 }];
                 });
             };
 
-            const cartTotal = cart.reduce((sum, item) => sum + (Number(item.price) * Number(item.qty)), 0);
+            const cartTotal = cart.reduce((sum, item) => sum + (Number(item.price || 0) * Number(item.qty || 0)), 0);
 
             const processCheckout = () => {
                 const cash = parseFloat(cashGiven);
@@ -312,7 +326,7 @@
 
                 const updatedProducts = products.map(p => {
                     const cartItem = cart.find(c => c.id === p.id);
-                    return cartItem ? { ...p, stock: Number(p.stock) - Number(cartItem.qty) } : p;
+                    return cartItem ? { ...p, stock: Number(p.stock || 0) - Number(cartItem.qty || 0) } : p;
                 });
 
                 let memberName = 'ลูกค้าทั่วไป';
@@ -386,9 +400,9 @@
                                     <div className="bg-white p-8 rounded-2xl shadow-sm border border-gray-100 w-96 max-w-full text-center relative overflow-hidden">
                                         <div className="absolute top-0 left-0 w-full h-2 bg-blue-500"></div>
                                         <div className="w-24 h-24 bg-blue-50 text-blue-600 rounded-full flex items-center justify-center mx-auto mb-4 border-4 border-white shadow-sm overflow-hidden">
-                                            {settings.coopLogo ? <img src={settings.coopLogo} className="w-full h-full object-cover" alt="Logo"/> : <UserCircle size={48} />}
+                                            {settings?.coopLogo ? <img src={settings.coopLogo} className="w-full h-full object-cover" alt="Logo"/> : <UserCircle size={48} />}
                                         </div>
-                                        <h2 className="text-2xl font-bold text-gray-800 mb-1">{settings.coopName || "จุดขายสินค้า (POS)"}</h2>
+                                        <h2 className="text-2xl font-bold text-gray-800 mb-1">{settings?.coopName || "จุดขายสินค้า (POS)"}</h2>
                                         <p className="text-gray-500 text-sm mb-6">กรุณากรอก <span className="font-bold text-blue-600">รหัสสมาชิก</span> เพื่อเข้ากะทำงาน</p>
                                         
                                         <form onSubmit={handlePosLoginSubmit} className="space-y-4">
@@ -419,14 +433,14 @@
                 <>
                 <div className="flex h-screen bg-gray-50 font-sans overflow-hidden print-hidden">
                     {/* Sidebar */}
-                    <div className={`bg-green-700 text-white flex flex-col shadow-lg z-20 transition-all duration-300 ease-in-out ${isSidebarOpen ? 'w-64' : 'w-20'}`}>
+                    <div className={`bg-green-700 text-white flex flex-col shadow-lg z-20 transition-all duration-300 ease-in-out ${isSidebarOpen ? 'w-64' : 'w-20'} print:hidden`}>
                         <div className={`p-4 bg-green-800 flex items-center transition-all ${isSidebarOpen ? 'gap-3' : 'justify-center'}`}>
                             <div className="w-10 h-10 bg-white rounded-full flex items-center justify-center text-green-700 font-bold text-xl shrink-0 shadow-sm overflow-hidden">
-                                {settings.coopLogo ? <img src={settings.coopLogo} className="w-full h-full object-cover" alt="Logo"/> : "สห."}
+                                {settings?.coopLogo ? <img src={settings.coopLogo} className="w-full h-full object-cover" alt="Logo"/> : "สห."}
                             </div>
                             {isSidebarOpen && (
                                 <div className="overflow-hidden whitespace-nowrap animate-in fade-in duration-300 flex-1">
-                                <h1 className="font-bold text-base leading-tight truncate">{settings.coopName || "สหกรณ์โรงเรียน"}</h1>
+                                <h1 className="font-bold text-base leading-tight truncate">{settings?.coopName || "สหกรณ์โรงเรียน"}</h1>
                                 <p className="text-[10px] text-green-200">{currentUser ? 'ระบบจัดการคลัง' : 'จุดขายสินค้า'}</p>
                                 </div>
                             )}
@@ -485,8 +499,8 @@
                     </div>
 
                     {/* Main Content */}
-                    <div className="flex-1 flex flex-col h-full min-w-0 bg-gray-50 relative">
-                        <header className="bg-white shadow-sm p-4 flex justify-between items-center z-10 shrink-0">
+                    <div className="flex-1 flex flex-col h-full min-w-0 bg-gray-50 relative print:bg-white print:h-auto print:overflow-visible">
+                        <header className="bg-white shadow-sm p-4 flex justify-between items-center z-10 shrink-0 print:hidden">
                         <div className="flex items-center gap-4">
                             <button onClick={() => setIsSidebarOpen(!isSidebarOpen)} className="p-2 text-gray-500 hover:bg-gray-100 hover:text-gray-800 rounded-lg transition bg-gray-50 border border-gray-200" title={isSidebarOpen ? 'ยุบเมนู' : 'แสดงเมนู'}><Menu size={24} /></button>
                             <h2 className="text-xl font-bold text-gray-800 flex items-center gap-2">
@@ -520,18 +534,18 @@
                             </div>
                         </div>
                         </header>
-                        <main className="flex-1 overflow-auto p-4 sm:p-6 relative pb-10">
+                        <main className="flex-1 overflow-auto p-4 sm:p-6 relative pb-10 print:p-0 print:overflow-visible">
                         {renderTabContent()}
                         </main>
                         
-                        <div className="absolute bottom-1.5 w-full text-center text-[10px] text-gray-400/50 font-medium pointer-events-none z-50">
+                        <div className="absolute bottom-1.5 w-full text-center text-[10px] text-gray-400/50 font-medium pointer-events-none z-50 print:hidden">
                         พัฒนาระบบ โดย ครูวัฒนา รู้ใหม่
                         </div>
                     </div>
 
                     {/* Modal ค้นหาและเลือกสมาชิก */}
                     {memberModalTarget && (
-                        <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-[120] p-4 backdrop-blur-sm">
+                        <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-[120] p-4 backdrop-blur-sm print:hidden">
                         <div className="bg-white rounded-xl w-full max-w-md overflow-hidden shadow-2xl flex flex-col max-h-[85vh] animate-in zoom-in-95 duration-200">
                             <div className="p-4 border-b flex justify-between items-center bg-gray-50 shrink-0">
                                 <h3 className="font-bold text-gray-800 flex items-center gap-2"><Users className="text-blue-600" /> {memberModalTarget === 'login' ? 'ค้นหาพนักงานขาย' : 'ค้นหาผู้ซื้อ'} (จากชื่อ)</h3>
@@ -544,11 +558,11 @@
                                 </div>
                             </div>
                             <div className="flex-1 overflow-y-auto p-2 bg-gray-50">
-                                {members.filter(m => String(m.name || '').toLowerCase().includes(memberSearch.toLowerCase()) || String(m.id || '').includes(memberSearch)).length === 0 ? (
+                                {(members||[]).filter(m => String(m.name || '').toLowerCase().includes(memberSearch.toLowerCase()) || String(m.id || '').includes(memberSearch)).length === 0 ? (
                                     <div className="text-center text-gray-400 py-10">ไม่พบรายชื่อสมาชิกที่ค้นหา</div>
                                 ) : (
                                     <div className="space-y-2">
-                                    {members.filter(m => String(m.name || '').toLowerCase().includes(memberSearch.toLowerCase()) || String(m.id || '').includes(memberSearch)).sort((a, b) => getGradeWeight(a.classLevel) - getGradeWeight(b.classLevel)).map(m => (
+                                    {(members||[]).filter(m => String(m.name || '').toLowerCase().includes(memberSearch.toLowerCase()) || String(m.id || '').includes(memberSearch)).sort((a, b) => getGradeWeight(a.classLevel) - getGradeWeight(b.classLevel)).map(m => (
                                         <div key={m.id} onClick={() => { if (memberModalTarget === 'login') { handlePosLogin(m.id); } else { setPosMemberId(m.id); } setMemberModalTarget(null); setMemberSearch(''); }} className="p-3 bg-white border border-gray-200 hover:border-blue-400 hover:bg-blue-50 cursor-pointer flex justify-between items-center rounded-xl transition shadow-sm group">
                                         <div className="flex items-center gap-3">
                                             <div className="w-10 h-10 rounded-full bg-blue-100 text-blue-600 flex items-center justify-center font-bold text-lg shrink-0 group-hover:bg-blue-600 group-hover:text-white transition">{String(m.name || 'U').charAt(0)}</div>
@@ -566,15 +580,15 @@
 
                     {/* Login Modal */}
                     {showLoginModal && (
-                        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-[100]">
+                        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-[100] print:hidden">
                         <div className="bg-white rounded-2xl shadow-2xl p-8 w-96 max-w-[90%] relative animate-in fade-in zoom-in-95 duration-200">
                             <button onClick={() => setShowLoginModal(false)} className="absolute top-4 right-4 text-gray-400 hover:text-gray-700 bg-gray-100 p-1 rounded-full"><X size={20} /></button>
                             <div className="text-center mb-8">
                             <div className="w-20 h-20 bg-green-50 text-green-600 rounded-full flex items-center justify-center mx-auto mb-4 overflow-hidden border-4 border-white shadow-sm">
-                                {settings.coopLogo ? <img src={settings.coopLogo} className="w-full h-full object-cover" alt="Logo"/> : <Shield size={40} />}
+                                {settings?.coopLogo ? <img src={settings.coopLogo} className="w-full h-full object-cover" alt="Logo"/> : <Shield size={40} />}
                             </div>
                             <h2 className="text-2xl font-bold text-gray-800">ระบบจัดการ (หลังบ้าน)</h2>
-                            <p className="text-sm text-gray-500 mt-1">{settings.coopName || "สหกรณ์โรงเรียน"}</p>
+                            <p className="text-sm text-gray-500 mt-1">{settings?.coopName || "สหกรณ์โรงเรียน"}</p>
                             </div>
                             <form onSubmit={handleLogin} className="space-y-4">
                             {loginError && <div className="p-3 bg-red-50 text-red-600 text-sm rounded-lg border border-red-200 text-center">{loginError}</div>}
@@ -591,7 +605,7 @@
 
                     {/* Checkout Modal */}
                     {checkoutModal && (
-                        <div className="fixed inset-0 bg-black bg-opacity-60 backdrop-blur-sm flex items-center justify-center z-[100] p-4">
+                        <div className="fixed inset-0 bg-black bg-opacity-60 backdrop-blur-sm flex items-center justify-center z-[100] p-4 print:hidden">
                         <div className="bg-white rounded-2xl shadow-2xl overflow-hidden flex flex-col max-w-2xl w-full animate-in zoom-in-95 duration-200">
                             <div className="flex justify-between items-center p-5 border-b bg-gray-50">
                             <h3 className="text-xl font-bold text-gray-800 flex items-center gap-2"><ShoppingCart size={24} className="text-green-600" /> ชำระเงิน (เงินสด)</h3>
@@ -640,30 +654,30 @@
 
                     {/* Receipt Modal */}
                     {receiptModal && lastReceipt && (
-                        <div className="fixed inset-0 bg-black bg-opacity-60 flex items-center justify-center z-[100] p-4">
+                        <div className="fixed inset-0 bg-black bg-opacity-60 flex items-center justify-center z-[100] p-4 print:hidden">
                         <div className="bg-white rounded-xl shadow-2xl p-0 w-80 max-w-full overflow-hidden flex flex-col max-h-[90vh]">
                             <div className="p-6 overflow-y-auto" id="receipt-content">
                             <div className="text-center mb-4">
                                 <div className="w-12 h-12 bg-white text-green-600 border border-gray-200 rounded-full flex items-center justify-center mx-auto mb-2 font-bold text-xl overflow-hidden shadow-sm">
-                                {settings.coopLogo ? <img src={settings.coopLogo} className="w-full h-full object-cover" alt="Logo"/> : "น.ย."}
+                                {settings?.coopLogo ? <img src={settings.coopLogo} className="w-full h-full object-cover" alt="Logo"/> : "น.ย."}
                                 </div>
-                                <h2 className="font-bold text-lg leading-tight">{settings.coopName || "ใบเสร็จรับเงิน"}</h2>
+                                <h2 className="font-bold text-lg leading-tight">{settings?.coopName || "ใบเสร็จรับเงิน"}</h2>
                                 <p className="text-xs text-gray-500 mt-1">เลขที่: {lastReceipt.id}</p>
                                 <p className="text-[10px] text-gray-400 mt-1">พนักงานขาย: {lastReceipt.seller}</p>
                                 {lastReceipt.memberId && <p className="text-[10px] text-blue-500 font-bold mt-1">รหัสสมาชิก: {lastReceipt.memberId}</p>}
                             </div>
                             <div className="border-t border-b border-dashed border-gray-300 py-3 mb-3">
-                                {lastReceipt.items.map((item, idx) => (
+                                {(Array.isArray(lastReceipt.items) ? lastReceipt.items : []).map((item, idx) => (
                                 <div key={idx} className="flex justify-between text-sm mb-1">
                                     <span className="flex-1 pr-2">{item.name} <span className="text-gray-400 text-xs">x{item.qty}</span></span>
-                                    <span className="w-16 text-right font-medium">{(Number(item.price) * Number(item.qty)).toLocaleString()}</span>
+                                    <span className="w-16 text-right font-medium">{(Number(item.price||0) * Number(item.qty||0)).toLocaleString()}</span>
                                 </div>
                                 ))}
                             </div>
                             <div className="space-y-1 text-sm">
-                                <div className="flex justify-between font-bold text-base"><span>ยอดรวม:</span><span>฿{lastReceipt.total.toLocaleString()}</span></div>
-                                <div className="flex justify-between text-gray-600"><span>รับเงินสด:</span><span>฿{lastReceipt.cash.toLocaleString()}</span></div>
-                                <div className="flex justify-between text-gray-800 font-bold"><span>เงินทอน:</span><span>฿{lastReceipt.change.toLocaleString()}</span></div>
+                                <div className="flex justify-between font-bold text-base"><span>ยอดรวม:</span><span>฿{Number(lastReceipt.total||0).toLocaleString()}</span></div>
+                                <div className="flex justify-between text-gray-600"><span>รับเงินสด:</span><span>฿{Number(lastReceipt.cash||0).toLocaleString()}</span></div>
+                                <div className="flex justify-between text-gray-800 font-bold"><span>เงินทอน:</span><span>฿{Number(lastReceipt.change||0).toLocaleString()}</span></div>
                             </div>
                             <div className="text-center mt-6 text-xs text-gray-500">
                                 <p>ขอบคุณที่ใช้บริการ</p>
@@ -682,7 +696,7 @@
             );
         }
 
-        // --- Components ย่อย ---
+        // --- Subcomponents ---
 
         function MemberPortalView({ members, settings, onExit, onRefresh, isRefreshing }) {
             const [searchId, setSearchId] = useState('');
@@ -691,7 +705,7 @@
 
             const handleSearch = (e) => {
                 e.preventDefault();
-                const found = members.find(m => String(m.id) === String(searchId));
+                const found = (Array.isArray(members) ? members : []).find(m => String(m.id) === String(searchId));
                 if (found) { setMemberData(found); setErrorMsg(''); } else { setMemberData(null); setErrorMsg('ไม่พบข้อมูลสมาชิกรหัสนี้'); }
             };
 
@@ -703,9 +717,9 @@
                     <button onClick={onExit} className="absolute top-4 left-4 p-2 bg-white/20 hover:bg-white/30 rounded-full transition"><ArrowLeft size={20} /></button>
                     <button onClick={onRefresh} className="absolute top-4 right-4 p-2 bg-white/20 hover:bg-white/30 rounded-full transition" title="รีเฟรชข้อมูลล่าสุด"><ArrowsClockwise size={20} className={isRefreshing ? "animate-spin" : ""} /></button>
                     <div className="w-20 h-20 bg-white rounded-full flex items-center justify-center mx-auto mb-4 shadow-lg border-4 border-white/20 overflow-hidden">
-                        {settings.coopLogo ? <img src={settings.coopLogo} className="w-full h-full object-cover" alt="Logo"/> : <Wallet className="text-purple-600" size={40} />}
+                        {settings?.coopLogo ? <img src={settings.coopLogo} className="w-full h-full object-cover" alt="Logo"/> : <Wallet className="text-purple-600" size={40} />}
                     </div>
-                    <h2 className="text-xl font-bold mb-1 leading-tight">{settings.coopName || "ระบบสมาชิก"}</h2>
+                    <h2 className="text-xl font-bold mb-1 leading-tight">{settings?.coopName || "ระบบสมาชิก"}</h2>
                     <p className="text-sm opacity-90">ตรวจสอบยอดเงินปันผลและเฉลี่ยคืน</p>
                     </div>
                     <div className="p-6">
@@ -724,7 +738,6 @@
                             <div className="bg-gray-50 p-4 rounded-2xl border border-gray-100 text-center"><p className="text-xs text-gray-500 mb-1">ยอดซื้อสะสม (ปีนี้)</p><p className="text-lg font-bold text-gray-800">฿{Number(memberData.totalSpent || 0).toLocaleString()}</p></div>
                         </div>
                         
-                        {/* คำนวณยอดจ่ายและคงเหลือของสมาชิกท่านนี้ */}
                         {(() => {
                             const totalDiv = Number(memberData.shares||0) * Number(settings.sharePrice||0) * (Number(settings.dividendRate||0) / 100);
                             const paidDiv = Number(memberData.paidDividend||0);
@@ -737,11 +750,11 @@
                             return (
                                 <div className="bg-purple-50 border border-purple-100 rounded-2xl p-5 space-y-4">
                                     <div>
-                                        <div className="flex justify-between items-center text-sm mb-1"><span className="text-purple-800 font-bold">เงินปันผลหุ้น ({settings.dividendRate}%)</span><span className="text-purple-900">รวม: ฿{totalDiv.toFixed(2)}</span></div>
+                                        <div className="flex justify-between items-center text-sm mb-1"><span className="text-purple-800 font-bold">เงินปันผลหุ้น ({settings?.dividendRate||0}%)</span><span className="text-purple-900">รวม: ฿{totalDiv.toFixed(2)}</span></div>
                                         <div className="flex justify-between items-center text-xs text-gray-600 pl-4"><span className="">จ่ายแล้ว: ฿{paidDiv.toFixed(2)}</span><span className="font-bold text-orange-600">ยกยอดสมทบ: ฿{remainDiv.toFixed(2)}</span></div>
                                     </div>
                                     <div>
-                                        <div className="flex justify-between items-center text-sm mb-1"><span className="text-blue-800 font-bold">เงินเฉลี่ยคืน ({settings.refundRate}%)</span><span className="text-blue-900">รวม: ฿{totalRef.toFixed(2)}</span></div>
+                                        <div className="flex justify-between items-center text-sm mb-1"><span className="text-blue-800 font-bold">เงินเฉลี่ยคืน ({settings?.refundRate||0}%)</span><span className="text-blue-900">รวม: ฿{totalRef.toFixed(2)}</span></div>
                                         <div className="flex justify-between items-center text-xs text-gray-600 pl-4"><span className="">จ่ายแล้ว: ฿{paidRef.toFixed(2)}</span><span className="font-bold text-orange-600">ยกยอดสมทบ: ฿{remainRef.toFixed(2)}</span></div>
                                     </div>
                                     
@@ -761,7 +774,6 @@
                     )}
                     </div>
                 </div>
-            </div>
             );
         }
 
@@ -839,12 +851,12 @@
             const [searchTerm, setSearchTerm] = useState('');
             const [showCameraScanner, setShowCameraScanner] = useState(false);
 
-            const filteredProducts = products.filter(p => String(p.name || '').toLowerCase().includes(searchTerm.toLowerCase()) || String(p.barcode || '').includes(searchTerm));
-            const cartTotal = cart.reduce((sum, item) => sum + (Number(item.price) * Number(item.qty)), 0);
+            const filteredProducts = (Array.isArray(products) ? products : []).filter(p => String(p.name || '').toLowerCase().includes(searchTerm.toLowerCase()) || String(p.barcode || '').includes(searchTerm));
+            const cartTotal = (Array.isArray(cart) ? cart : []).reduce((sum, item) => sum + (Number(item.price) * Number(item.qty)), 0);
 
             const updateQty = (id, newQty) => {
-                if (newQty < 1) return setCart(cart.filter(item => item.id !== id));
-                setCart(cart.map(item => item.id === id ? { ...item, qty: newQty } : item));
+                if (newQty < 1) return setCart((Array.isArray(cart) ? cart : []).filter(item => item.id !== id));
+                setCart((Array.isArray(cart) ? cart : []).map(item => item.id === id ? { ...item, qty: newQty } : item));
             };
 
             const handleCameraScan = (barcode) => {
@@ -855,7 +867,7 @@
                 osc.type = 'sine'; osc.frequency.value = 800; gain.gain.setValueAtTime(0.1, audioCtx.currentTime);
                 osc.start(); osc.stop(audioCtx.currentTime + 0.1);
                 } catch(e){}
-                const product = products.find(p => String(p.barcode) === String(barcode));
+                const product = (Array.isArray(products) ? products : []).find(p => String(p.barcode) === String(barcode));
                 if (product) { setCart(prev => prev.find(i => i.id === product.id) ? prev.map(i => i.id === product.id ? { ...i, qty: i.qty + 1 } : i) : [...prev, { ...product, qty: 1 }]); } else alert(`ไม่พบสินค้าบาร์โค้ด: ${barcode}`);
                 setShowCameraScanner(false);
             };
@@ -899,7 +911,7 @@
                     <Users size={18} className="text-blue-600 shrink-0"/>
                     <input type="text" placeholder="รหัส นร./ครู (ถ้ามี)" value={posMemberId} onChange={(e) => setPosMemberId(e.target.value)} className="flex-1 px-3 py-1.5 rounded border border-blue-200 text-sm focus:outline-none focus:ring-1 focus:ring-blue-500 min-w-[120px]" />
                     <button onClick={onOpenSearch} className="bg-blue-600 text-white px-3 py-1.5 rounded text-sm hover:bg-blue-700 transition shadow-sm font-medium flex items-center gap-1"><Search size={16} /> ค้นหา</button>
-                    {posMemberId && members.find(m=>String(m.id) === String(posMemberId)) && (<div className="w-full flex items-center gap-1 text-sm text-green-700 font-bold mt-1 bg-green-100 px-2 py-1 rounded"><CheckCircle size={16} className="text-green-500" />{members.find(m=>String(m.id) === String(posMemberId)).name}</div>)}
+                    {posMemberId && (Array.isArray(members) ? members : []).find(m=>String(m.id) === String(posMemberId)) && (<div className="w-full flex items-center gap-1 text-sm text-green-700 font-bold mt-1 bg-green-100 px-2 py-1 rounded"><CheckCircle size={16} className="text-green-500" />{members.find(m=>String(m.id) === String(posMemberId)).name}</div>)}
                     </div>
                     <div className="flex-1 overflow-y-auto p-3 bg-gray-50/50">
                     {cart.length === 0 ? <div className="h-full flex flex-col items-center justify-center text-gray-400"><ShoppingCart size={48} className="mb-2 opacity-50" /><p>ยังไม่มีสินค้า</p></div> : 
@@ -978,10 +990,10 @@
                 e.preventDefault();
                 let newProducts;
                 if (modalMode === 'add') {
-                newProducts = [...products, currentProduct];
+                newProducts = [...(Array.isArray(products) ? products : []), currentProduct];
                 addLog('เพิ่มสินค้าใหม่', `รหัส ${currentProduct.barcode} - ${currentProduct.name} จำนวน ${currentProduct.stock} ชิ้น`);
                 } else {
-                newProducts = products.map(p => String(p.id) === String(currentProduct.id) ? currentProduct : p);
+                newProducts = (Array.isArray(products) ? products : []).map(p => String(p.id) === String(currentProduct.id) ? currentProduct : p);
                 addLog('แก้ไขสินค้า', `อัปเดตข้อมูล ${currentProduct.name}`);
                 }
                 setProducts(newProducts);
@@ -990,7 +1002,7 @@
 
             const handleDelete = (id, name) => {
                 if(window.confirm(`ต้องการลบสินค้า ${name} ใช่หรือไม่?`)) {
-                const newProducts = products.filter(p => String(p.id) !== String(id));
+                const newProducts = (Array.isArray(products) ? products : []).filter(p => String(p.id) !== String(id));
                 setProducts(newProducts);
                 addLog('ลบสินค้า', `ลบสินค้า ${name} ออกจากคลัง`);
                 }
@@ -1017,7 +1029,7 @@
                         </tr>
                     </thead>
                     <tbody className="divide-y divide-gray-100 text-sm">
-                        {products.map(p => (
+                        {(Array.isArray(products) ? products : []).map(p => (
                         <tr key={p.id} className="hover:bg-gray-50 transition">
                             <td className="p-3">
                             <div className="bg-white border rounded p-1 inline-block"><img src={`https://barcode.tec-it.com/barcode.ashx?data=${p.barcode}&code=Code128&translate-esc=true&dpi=96`} alt="barcode" className="h-10 w-auto" /></div>
@@ -1110,14 +1122,13 @@
         function Members({ members, setMembers, settings, expenses, setExpenses, addLog, currentUser }) {
             const [editModal, setEditModal] = useState(null);
             
-            // State สำหรับจ่ายปันผล
             const [paymentModal, setPaymentModal] = useState(null);
             const [payForm, setPayForm] = useState({ dividend: 0, refund: 0 });
 
             const handleSave = (e) => {
                 e.preventDefault();
-                const newMembers = members.map(m => String(m.id) === String(editModal.id) ? editModal : m);
-                if (!members.find(m => String(m.id) === String(editModal.id))) newMembers.push(editModal);
+                const newMembers = (Array.isArray(members) ? members : []).map(m => String(m.id) === String(editModal.id) ? editModal : m);
+                if (!(Array.isArray(members) ? members : []).find(m => String(m.id) === String(editModal.id))) newMembers.push(editModal);
                 setMembers(newMembers);
                 addLog('จัดการสมาชิก', `บันทึกข้อมูลสมาชิก ${editModal.name}`);
                 setEditModal(null);
@@ -1125,7 +1136,7 @@
 
             const handleDeleteMember = (id, name) => {
                 if (window.confirm(`ต้องการลบสมาชิก ${name} ใช่หรือไม่?`)) {
-                const newMembers = members.filter(m => String(m.id) !== String(id));
+                const newMembers = (Array.isArray(members) ? members : []).filter(m => String(m.id) !== String(id));
                 setMembers(newMembers);
                 addLog('ลบสมาชิก', `ลบข้อมูลสมาชิก: ${name} (${id})`);
                 }
@@ -1140,7 +1151,6 @@
                 const totalRef = Number(member.totalSpent||0) * (Number(settings.refundRate||0) / 100);
                 const paidRef = Number(member.paidRefund||0);
                 
-                // ให้ค่าเริ่มต้นเป็นยอดที่ค้างจ่ายทั้งหมด
                 setPayForm({
                     dividend: Math.max(0, totalDiv - paidDiv).toFixed(2),
                     refund: Math.max(0, totalRef - paidRef).toFixed(2)
@@ -1155,16 +1165,14 @@
 
                 if (totalPay <= 0) return alert("กรุณาระบุยอดเงินที่ต้องการจ่าย");
 
-                // 1. อัปเดตข้อมูลสมาชิก (บวกยอดที่จ่ายไปแล้ว)
                 const updatedMember = {
                     ...paymentModal,
                     paidDividend: Number(paymentModal.paidDividend||0) + payDiv,
                     paidRefund: Number(paymentModal.paidRefund||0) + payRef
                 };
-                const newMembers = members.map(m => String(m.id) === String(paymentModal.id) ? updatedMember : m);
+                const newMembers = (Array.isArray(members) ? members : []).map(m => String(m.id) === String(paymentModal.id) ? updatedMember : m);
                 setMembers(newMembers);
 
-                // 2. บันทึกเป็นรายจ่าย (Expense) เพื่อตัดเงินในลิ้นชักออก!
                 const newExpense = {
                     id: 'EXP' + Date.now().toString().slice(-4), 
                     date: new Date().toLocaleString('th-TH'), 
@@ -1175,12 +1183,14 @@
                     details: `[จ่ายปันผล] รหัส ${paymentModal.id} (ปันผล: ${payDiv}฿, เฉลี่ยคืน: ${payRef}฿)`, 
                     image: ""
                 };
-                setExpenses([newExpense, ...expenses], newExpense);
+                setExpenses([newExpense, ...(Array.isArray(expenses) ? expenses : [])], newExpense);
 
                 addLog('จ่ายปันผลสมาชิก', `จ่ายเงิน ฿${totalPay} ให้ ${paymentModal.name}`);
                 setPaymentModal(null);
                 alert("บันทึกการจ่ายเงินปันผลสำเร็จ ระบบหักเงินออกจากลิ้นชักแล้ว!");
             };
+
+            const arrMembers = Array.isArray(members) ? members : [];
 
             return (
                 <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6">
@@ -1192,12 +1202,12 @@
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
                     <div className="bg-orange-50 p-5 rounded-xl border border-orange-100 shadow-sm">
                     <p className="text-sm text-orange-600 font-medium">จำนวนสมาชิกทั้งหมด</p>
-                    <p className="text-3xl font-black text-orange-800 mt-1">{members.length} <span className="text-base font-normal">คน</span></p>
+                    <p className="text-3xl font-black text-orange-800 mt-1">{arrMembers.length} <span className="text-base font-normal">คน</span></p>
                     </div>
                     <div className="bg-purple-50 p-5 rounded-xl border border-purple-100 shadow-sm">
                     <p className="text-sm text-purple-600 font-medium">รวมหุ้นสหกรณ์ทั้งหมด</p>
-                    <p className="text-3xl font-black text-purple-800 mt-1">{members.reduce((acc, m) => acc + Number(m.shares||0), 0)} <span className="text-base font-normal">หุ้น</span></p>
-                    <p className="text-xs text-purple-500 mt-1">มูลค่ารวม {(members.reduce((acc, m) => acc + Number(m.shares||0), 0) * Number(settings.sharePrice||0)).toLocaleString()} บาท</p>
+                    <p className="text-3xl font-black text-purple-800 mt-1">{arrMembers.reduce((acc, m) => acc + Number(m.shares||0), 0)} <span className="text-base font-normal">หุ้น</span></p>
+                    <p className="text-xs text-purple-500 mt-1">มูลค่ารวม {(arrMembers.reduce((acc, m) => acc + Number(m.shares||0), 0) * Number(settings.sharePrice||0)).toLocaleString()} บาท</p>
                     </div>
                 </div>
 
@@ -1218,7 +1228,7 @@
                         </tr>
                     </thead>
                     <tbody className="divide-y divide-gray-100 text-sm">
-                        {members.slice().sort((a, b) => getGradeWeight(a.classLevel) - getGradeWeight(b.classLevel)).map(m => {
+                        {arrMembers.slice().sort((a, b) => getGradeWeight(a.classLevel) - getGradeWeight(b.classLevel)).map(m => {
                         const totalDiv = (Number(m.shares||0) * Number(settings.sharePrice||0) * (Number(settings.dividendRate||0) / 100));
                         const paidDiv = Number(m.paidDividend||0);
                         const remainDiv = Math.max(0, totalDiv - paidDiv);
@@ -1265,7 +1275,6 @@
                     </table>
                 </div>
 
-                {/* Modal จ่ายเงินปันผล/เฉลี่ยคืนแบบระบุยอด */}
                 {paymentModal && (
                     <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-[100] p-4 backdrop-blur-sm">
                     <div className="bg-white rounded-2xl w-full max-w-lg overflow-hidden shadow-2xl animate-in zoom-in-95">
@@ -1280,7 +1289,6 @@
                         </div>
 
                         <form onSubmit={handleSavePayment} className="p-6 space-y-5 bg-white">
-                            {/* กรอบปันผลหุ้น */}
                             <div className="border border-purple-200 rounded-xl overflow-hidden">
                                 <div className="bg-purple-50 p-3 border-b border-purple-200 flex justify-between">
                                     <span className="font-bold text-purple-800 text-sm">1. สิทธิ์เงินปันผลหุ้น</span>
@@ -1298,7 +1306,6 @@
                                 </div>
                             </div>
 
-                            {/* กรอบเฉลี่ยคืน */}
                             <div className="border border-blue-200 rounded-xl overflow-hidden">
                                 <div className="bg-blue-50 p-3 border-b border-blue-200 flex justify-between">
                                     <span className="font-bold text-blue-800 text-sm">2. สิทธิ์เงินเฉลี่ยคืน</span>
@@ -1330,7 +1337,6 @@
                     </div>
                 )}
 
-                {/* Modal แก้ไขประวัติเดิม */}
                 {editModal && (
                     <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[100] p-4">
                     <div className="bg-white rounded-xl p-6 w-[400px] max-w-full shadow-2xl">
@@ -1359,7 +1365,363 @@
             );
         }
 
-        // --- Reports and Print Components ---
+        function ExpenseManagement({ expenses, setExpenses, sales, members, settings, addLog, currentUser }) {
+            const [modalMode, setModalMode] = useState(null); 
+            const [form, setForm] = useState({ amount: '', receiver: '', details: '', image: null });
+            const [viewImage, setViewImage] = useState(null);
+            
+            const [clearAdvanceExp, setClearAdvanceExp] = useState(null);
+            const [clearForm, setClearForm] = useState({ spent: '', image: null });
+
+            const arrMembers = Array.isArray(members) ? members : [];
+            const arrSales = Array.isArray(sales) ? sales : [];
+            const arrExpenses = Array.isArray(expenses) ? expenses : [];
+
+            const totalShareCapital = arrMembers.reduce((sum, m) => sum + Number(m.shares||0), 0) * Number(settings.sharePrice||0); 
+            const totalSalesCash = arrSales.reduce((sum, s) => sum + Number(s.total||0), 0); 
+            const totalExpensesCash = arrExpenses.reduce((sum, e) => sum + Number(e.amount||0), 0); 
+            const currentDrawerCash = totalShareCapital + totalSalesCash - totalExpensesCash; 
+
+            const handleImageUpload = (e, targetForm, setTargetForm) => {
+                const file = e.target.files[0];
+                if (file) {
+                const reader = new FileReader();
+                reader.onload = (event) => {
+                    const img = new Image();
+                    img.onload = () => {
+                        const canvas = document.createElement('canvas');
+                        const MAX_SIZE = 800;
+                        let width = img.width;
+                        let height = img.height;
+                        if (width > height) { if (width > MAX_SIZE) { height *= MAX_SIZE / width; width = MAX_SIZE; } } 
+                        else { if (height > MAX_SIZE) { width *= MAX_SIZE / height; height = MAX_SIZE; } }
+                        canvas.width = width; canvas.height = height;
+                        const ctx = canvas.getContext('2d');
+                        ctx.drawImage(img, 0, 0, width, height);
+                        const compressedDataUrl = canvas.toDataURL('image/jpeg', 0.6); 
+                        setTargetForm({ ...targetForm, image: compressedDataUrl });
+                    };
+                    img.src = event.target.result;
+                };
+                reader.readAsDataURL(file);
+                }
+            };
+
+            const handleSaveExpense = (e) => {
+                e.preventDefault();
+                if (!form.amount || !form.receiver || !form.details) return alert("กรุณากรอกข้อมูลให้ครบถ้วน");
+                
+                const amt = parseFloat(form.amount);
+                if (amt <= 0) return alert("จำนวนเงินไม่ถูกต้อง");
+                if (amt > currentDrawerCash) {
+                    if (!window.confirm(`ยอดเงินที่เบิก (฿${amt}) มากกว่าเงินในระบบที่มี (฿${currentDrawerCash}) \nต้องการดำเนินการต่อหรือไม่?`)) return;
+                }
+                if (!form.image && !window.confirm(`คุณยังไม่ได้แนบหลักฐาน \nยืนยันจะบันทึกหรือไม่?`)) return;
+
+                const newExpense = {
+                    id: 'EXP' + Date.now().toString().slice(-4), date: new Date().toLocaleString('th-TH'), type: modalMode,
+                    amount: amt, user: currentUser.name, receiver: form.receiver, details: form.details, image: form.image || ""
+                };
+
+                const newExpenses = [newExpense, ...arrExpenses];
+                setExpenses(newExpenses, newExpense);
+                
+                const logType = modalMode === 'purchase' ? 'จ่ายเงินซื้อสินค้า' : modalMode === 'special' ? 'เบิกจ่ายพิเศษ' : 'ให้ยืมเงินรองจ่าย';
+                addLog(logType, `เบิกเงิน ฿${amt} ให้ ${form.receiver} (${form.details})`);
+                setModalMode(null);
+                setForm({ amount: '', receiver: '', details: '', image: null });
+                alert("บันทึกการเบิกจ่ายเงินสำเร็จ");
+            };
+
+            const handleSaveClearAdvance = (e) => {
+                e.preventDefault();
+                const spent = parseFloat(clearForm.spent);
+                if (isNaN(spent) || spent < 0) return alert("กรุณากรอกยอดที่ซื้อของจริงให้ถูกต้อง");
+                
+                const originalAmt = clearAdvanceExp.amount;
+                const changeToReturn = originalAmt - spent; 
+                const expenseAdjustmentAmount = spent - originalAmt; 
+
+                const newExpense = {
+                    id: 'EXP' + Date.now().toString().slice(-4),
+                    date: new Date().toLocaleString('th-TH'),
+                    type: 'advance_clear',
+                    amount: expenseAdjustmentAmount, 
+                    user: currentUser.name,
+                    receiver: clearAdvanceExp.receiver,
+                    details: `[เคลียร์ยอด ${clearAdvanceExp.id}] ซื้อของจริง ฿${spent.toLocaleString()} (ยืมไป ฿${originalAmt.toLocaleString()})`,
+                    image: clearForm.image || ""
+                };
+
+                const newExpenses = [newExpense, ...arrExpenses];
+                setExpenses(newExpenses, newExpense);
+                
+                let logMsg = `เคลียร์ยอด ${clearAdvanceExp.id} (ซื้อจริง ${spent}฿, `;
+                if (changeToReturn > 0) logMsg += `คืนเงินทอน ${changeToReturn}฿ เข้าลิ้นชัก)`;
+                else if (changeToReturn < 0) logMsg += `เบิกเพิ่ม ${-changeToReturn}฿ จากลิ้นชัก)`;
+                else logMsg += `พอดีกับยอดที่ยืม)`;
+                
+                addLog('เคลียร์เงินยืม', logMsg);
+                setClearAdvanceExp(null);
+                setClearForm({ spent: '', image: null });
+                alert("บันทึกการเคลียร์ยอดสำเร็จ เงินในลิ้นชักได้รับการปรับปรุงแล้ว!");
+            };
+
+            const checkIsCleared = (expId) => {
+                return arrExpenses.some(e => e.type === 'advance_clear' && String(e.details).includes(expId));
+            };
+
+            return (
+                <div className="space-y-6">
+                <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6 flex flex-col md:flex-row justify-between items-center gap-6">
+                    <div className="flex items-center gap-4">
+                    <div className="w-16 h-16 bg-blue-100 text-blue-600 rounded-full flex items-center justify-center"><Wallet size={32}/></div>
+                    <div>
+                        <p className="text-sm font-bold text-gray-500">เงินสดคงเหลือ (ทุนหุ้น + ยอดขาย - เบิกจ่าย + คืนทอน)</p>
+                        <p className={`text-4xl font-black ${currentDrawerCash < 0 ? 'text-red-600' : 'text-blue-700'}`}>฿{currentDrawerCash.toLocaleString('th-TH', {minimumFractionDigits:2})}</p>
+                        {currentDrawerCash < 0 && <p className="text-xs text-red-500 mt-1">* เงินสดติดลบ (มีการนำเงินส่วนตัวมาเติม)</p>}
+                    </div>
+                    </div>
+                    <div className="flex flex-wrap gap-3 w-full md:w-auto">
+                        <button onClick={() => setModalMode('purchase')} className="flex-1 md:flex-none bg-green-600 text-white px-5 py-3 rounded-lg font-bold hover:bg-green-700 transition flex items-center justify-center gap-2 shadow-sm"><ShoppingCart size={18}/> ซื้อของเข้าร้าน</button>
+                        <button onClick={() => setModalMode('advance')} className="flex-1 md:flex-none bg-orange-500 text-white px-5 py-3 rounded-lg font-bold hover:bg-orange-600 transition flex items-center justify-center gap-2 shadow-sm"><Receipt size={18}/> ให้ยืมเงินรองจ่าย</button>
+                        <button onClick={() => setModalMode('special')} className="flex-1 md:flex-none bg-purple-600 text-white px-5 py-3 rounded-lg font-bold hover:bg-purple-700 transition flex items-center justify-center gap-2 shadow-sm"><Gift size={18}/> เบิกจ่ายพิเศษ</button>
+                    </div>
+                </div>
+
+                <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6">
+                    <h3 className="text-lg font-bold text-gray-800 mb-4 border-b pb-2">ประวัติการเบิกจ่าย และการเคลียร์ยอด</h3>
+                    <div className="overflow-x-auto">
+                        <table className="w-full text-left min-w-[1000px]">
+                        <thead>
+                            <tr className="bg-gray-50 text-gray-600 text-sm border-b">
+                            <th className="p-3">รหัส/วันที่</th>
+                            <th className="p-3">ประเภท</th>
+                            <th className="p-3">ผู้บันทึก (Admin)</th>
+                            <th className="p-3">ผู้รับเงิน/ร้านค้า</th>
+                            <th className="p-3">รายละเอียด</th>
+                            <th className="p-3 text-right">ยอดเบิก/คืน (฿)</th>
+                            <th className="p-3 text-center">หลักฐาน</th>
+                            <th className="p-3 text-center">สถานะ/เคลียร์ยอด</th>
+                            </tr>
+                        </thead>
+                        <tbody className="divide-y divide-gray-100 text-sm">
+                            {arrExpenses.length === 0 ? <tr><td colSpan="8" className="text-center py-8 text-gray-400">ยังไม่มีประวัติการเบิกเงิน</td></tr> : 
+                            arrExpenses.map(exp => {
+                                const isAdvance = exp.type === 'advance';
+                                const isCleared = isAdvance ? checkIsCleared(exp.id) : false;
+                                
+                                return (
+                                <tr key={exp.id} className={`hover:bg-gray-50 ${exp.type === 'advance_clear' ? 'bg-green-50/30' : ''}`}>
+                                    <td className="p-3"><p className="font-bold text-gray-800">{exp.id}</p><p className="text-xs text-gray-500">{exp.date}</p></td>
+                                    <td className="p-3">
+                                        <span className={`px-2 py-1 rounded-full text-xs border whitespace-nowrap 
+                                            ${exp.type === 'purchase' ? 'bg-green-50 text-green-700 border-green-200' : 
+                                            exp.type === 'advance' ? 'bg-orange-50 text-orange-700 border-orange-200' :
+                                            exp.type === 'special' ? 'bg-purple-50 text-purple-700 border-purple-200' :
+                                            exp.type === 'payout' ? 'bg-indigo-50 text-indigo-700 border-indigo-200' :
+                                            'bg-blue-50 text-blue-700 border-blue-200'}`}>
+                                            {exp.type === 'purchase' ? 'ซื้อสินค้าเข้า' : 
+                                             exp.type === 'advance' ? 'ยืมเงินรองจ่าย' : 
+                                             exp.type === 'special' ? 'เบิกจ่ายพิเศษ' :
+                                             exp.type === 'payout' ? 'จ่ายปันผล' : 'เคลียร์เงินยืม'}
+                                        </span>
+                                    </td>
+                                    <td className="p-3 text-gray-700">{exp.user}</td>
+                                    <td className="p-3 font-bold text-blue-700">{exp.receiver}</td>
+                                    <td className="p-3 text-gray-600 max-w-[200px] truncate" title={exp.details}>{exp.details}</td>
+                                    <td className={`p-3 text-right font-black ${Number(exp.amount) > 0 ? 'text-red-600' : 'text-green-600'}`}>
+                                        {Number(exp.amount) > 0 ? `- ฿${Number(exp.amount).toLocaleString()}` : `+ ฿${Math.abs(Number(exp.amount)).toLocaleString()}`}
+                                    </td>
+                                    <td className="p-3 text-center">
+                                    {exp.image ? (
+                                        <button onClick={() => setViewImage(exp.image)} className="text-blue-500 hover:text-blue-700 font-medium text-xs flex items-center justify-center gap-1 mx-auto bg-blue-50 px-2 py-1 rounded"><FileImage size={14}/> ดูรูป</button>
+                                    ) : <span className="text-gray-400 text-xs">-</span>}
+                                    </td>
+                                    <td className="p-3 text-center">
+                                        {isAdvance ? (
+                                            isCleared ? (
+                                                <span className="text-green-600 font-bold text-xs flex items-center justify-center gap-1"><CheckCircle size={14}/> เคลียร์แล้ว</span>
+                                            ) : (
+                                                <button onClick={() => {setClearAdvanceExp(exp); setClearForm({spent: '', image: null})}} className="bg-orange-100 text-orange-700 hover:bg-orange-200 px-3 py-1 rounded-lg text-xs font-bold transition shadow-sm border border-orange-300">เคลียร์ยอด</button>
+                                            )
+                                        ) : <span className="text-gray-300 text-xs">-</span>}
+                                    </td>
+                                </tr>
+                                )
+                            })
+                            }
+                        </tbody>
+                        </table>
+                    </div>
+                </div>
+
+                {modalMode && (
+                    <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-[100] p-4 backdrop-blur-sm">
+                    <div className="bg-white rounded-2xl w-full max-w-lg overflow-hidden shadow-2xl animate-in zoom-in-95">
+                        <div className={`p-4 flex justify-between items-center text-white ${modalMode === 'purchase' ? 'bg-green-600' : modalMode === 'special' ? 'bg-purple-600' : 'bg-orange-500'}`}>
+                            <h3 className="font-bold text-lg flex items-center gap-2">
+                                {modalMode === 'purchase' ? <><ShoppingCart/> บันทึกการซื้อสินค้าเข้าร้าน</> : 
+                                 modalMode === 'special' ? <><Gift/> บันทึกเบิกจ่ายพิเศษ (โบนัส/กิจกรรม)</> : 
+                                 <><Receipt/> บันทึกให้ยืมเงินรองจ่าย</>}
+                            </h3>
+                            <button onClick={() => {setModalMode(null); setForm({amount:'', receiver:'', details:'', image:null})}} className="text-white/70 hover:text-white"><X size={20}/></button>
+                        </div>
+                        <div className="p-6 bg-gray-50 border-b flex justify-between items-center">
+                            <span className="text-gray-600 font-medium">เงินสดในระบบปัจจุบัน:</span>
+                            <span className="text-2xl font-black text-blue-700">฿{currentDrawerCash.toLocaleString('th-TH', {minimumFractionDigits:2})}</span>
+                        </div>
+                        <form onSubmit={handleSaveExpense} className="p-6 space-y-4 bg-white">
+                            <div>
+                            <label className="block text-sm font-bold text-gray-700 mb-1">ยอดเบิกเงินสด (บาท) <span className="text-red-500">*</span></label>
+                            <input type="number" value={form.amount} onChange={e=>setForm({...form, amount: e.target.value})} className="w-full text-2xl font-bold text-red-600 p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none" placeholder="0.00" required autoFocus />
+                            </div>
+                            <div>
+                            <label className="block text-sm font-bold text-gray-700 mb-1">{modalMode === 'purchase' ? 'ชื่อร้านค้า/สถานที่ซื้อ' : modalMode === 'special' ? 'ผู้รับเงิน/โครงการ' : 'ชื่อผู้ยืมเงิน'} <span className="text-red-500">*</span></label>
+                            <input type="text" value={form.receiver} onChange={e=>setForm({...form, receiver: e.target.value})} className="w-full p-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none" placeholder={modalMode === 'purchase' ? 'เช่น แม็คโคร, ร้านสมปอง' : modalMode === 'special' ? 'เช่น ผอ. โรงเรียน, กิจกรรมวันเด็ก' : 'เช่น ครูวิชัย'} required />
+                            </div>
+                            <div>
+                            <label className="block text-sm font-bold text-gray-700 mb-1">รายละเอียด/รายการ <span className="text-red-500">*</span></label>
+                            <textarea value={form.details} onChange={e=>setForm({...form, details: e.target.value})} className="w-full p-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none h-20 resize-none" placeholder="ระบุสิ่งที่ซื้อ หรือเหตุผลที่ยืมเงิน..." required />
+                            </div>
+                            <div>
+                            <label className="block text-sm font-bold text-gray-700 mb-1">แนบรูปภาพใบเสร็จ/หลักฐาน</label>
+                            <div className="border-2 border-dashed border-gray-300 rounded-lg p-4 text-center hover:bg-gray-50 transition relative">
+                                <input type="file" accept="image/*" onChange={(e) => handleImageUpload(e, form, setForm)} className="absolute inset-0 w-full h-full opacity-0 cursor-pointer" />
+                                {form.image ? (
+                                <div className="flex flex-col items-center"><img src={form.image} alt="Evidence" className="h-24 object-contain rounded border mb-2 shadow-sm"/><span className="text-xs text-blue-600 font-medium">กดเพื่อเปลี่ยนรูปภาพ</span></div>
+                                ) : (
+                                <div className="flex flex-col items-center text-gray-400 py-2"><UploadCloud size={32} className="mb-2"/><p className="text-sm font-medium">คลิกเพื่อถ่ายรูป / อัปโหลดไฟล์ภาพ</p></div>
+                                )}
+                            </div>
+                            </div>
+                            <div className="pt-4 flex gap-3">
+                            <button type="button" onClick={() => {setModalMode(null); setForm({amount:'', receiver:'', details:'', image:null})}} className="flex-1 py-3 bg-gray-100 text-gray-700 font-bold rounded-lg hover:bg-gray-200 transition">ยกเลิก</button>
+                            <button type="submit" className={`flex-1 py-3 text-white font-bold rounded-lg transition shadow-md ${modalMode === 'purchase' ? 'bg-green-600 hover:bg-green-700' : modalMode === 'special' ? 'bg-purple-600 hover:bg-purple-700' : 'bg-orange-500 hover:bg-orange-600'}`}>บันทึกหักเงิน</button>
+                            </div>
+                        </form>
+                    </div>
+                    </div>
+                )}
+
+                {clearAdvanceExp && (
+                    <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-[100] p-4 backdrop-blur-sm">
+                    <div className="bg-white rounded-2xl w-full max-w-lg overflow-hidden shadow-2xl animate-in zoom-in-95">
+                        <div className="p-4 flex justify-between items-center text-white bg-blue-600">
+                            <h3 className="font-bold text-lg flex items-center gap-2"><Receipt/> เคลียร์ยอดเงินยืมรองจ่าย</h3>
+                            <button onClick={() => {setClearAdvanceExp(null); setClearForm({spent:'', image:null})}} className="text-white/70 hover:text-white"><X size={20}/></button>
+                        </div>
+                        
+                        <div className="p-6 bg-gray-50 border-b">
+                            <div className="flex justify-between items-center mb-2">
+                            <span className="text-gray-600 font-medium">ผู้ยืม:</span>
+                            <span className="font-bold text-gray-800">{clearAdvanceExp.receiver}</span>
+                            </div>
+                            <div className="flex justify-between items-center">
+                            <span className="text-gray-600 font-medium">ยอดที่ยืมไป (ตั้งต้น):</span>
+                            <span className="text-2xl font-black text-orange-600">฿{clearAdvanceExp.amount.toLocaleString()}</span>
+                            </div>
+                        </div>
+
+                        <form onSubmit={handleSaveClearAdvance} className="p-6 space-y-4 bg-white">
+                            <div className="bg-blue-50 border border-blue-200 p-4 rounded-xl">
+                                <label className="block text-sm font-bold text-blue-800 mb-1">ยอดที่นำไปซื้อของจริง (บาท) <span className="text-red-500">*</span></label>
+                                <input type="number" value={clearForm.spent} onChange={e=>setClearForm({...clearForm, spent: e.target.value})} className="w-full text-2xl font-bold text-blue-900 p-3 border border-blue-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none bg-white" placeholder="เช่น 80" required autoFocus />
+                                
+                                {clearForm.spent !== '' && (
+                                    <div className="mt-4 pt-4 border-t border-blue-200 flex justify-between items-center">
+                                        <span className="font-bold text-gray-700">
+                                            {Number(clearAdvanceExp.amount) - parseFloat(clearForm.spent) >= 0 ? 'เงินทอนที่จะคืนเข้าลิ้นชัก:' : 'ต้องจ่ายเพิ่มจากลิ้นชัก:'}
+                                        </span>
+                                        <span className={`text-2xl font-black ${Number(clearAdvanceExp.amount) - parseFloat(clearForm.spent) >= 0 ? 'text-green-600' : 'text-red-600'}`}>
+                                            ฿{Math.abs(Number(clearAdvanceExp.amount) - parseFloat(clearForm.spent)).toLocaleString()}
+                                        </span>
+                                    </div>
+                                )}
+                            </div>
+
+                            <div>
+                                <label className="block text-sm font-bold text-gray-700 mb-1">แนบรูปภาพใบเสร็จที่ไปซื้อของมา (จำเป็น)</label>
+                                <div className="border-2 border-dashed border-gray-300 rounded-lg p-4 text-center hover:bg-gray-50 transition relative">
+                                    <input type="file" accept="image/*" onChange={(e) => handleImageUpload(e, clearForm, setClearForm)} className="absolute inset-0 w-full h-full opacity-0 cursor-pointer" required />
+                                    {clearForm.image ? (
+                                    <div className="flex flex-col items-center"><img src={clearForm.image} alt="Evidence" className="h-24 object-contain rounded border mb-2 shadow-sm"/><span className="text-xs text-blue-600 font-medium">กดเพื่อเปลี่ยนรูปภาพ</span></div>
+                                    ) : (
+                                    <div className="flex flex-col items-center text-gray-400 py-2"><UploadCloud size={32} className="mb-2"/><p className="text-sm font-medium">คลิกเพื่อถ่ายรูป / อัปโหลดไฟล์ภาพ</p></div>
+                                    )}
+                                </div>
+                            </div>
+
+                            <div className="pt-4 flex gap-3">
+                                <button type="button" onClick={() => {setClearAdvanceExp(null); setClearForm({spent:'', image:null})}} className="flex-1 py-3 bg-gray-100 text-gray-700 font-bold rounded-lg hover:bg-gray-200 transition">ยกเลิก</button>
+                                <button type="submit" className={`flex-1 py-3 text-white font-bold rounded-lg transition shadow-md bg-blue-600 hover:bg-blue-700`}>ยืนยันเคลียร์ยอด</button>
+                            </div>
+                        </form>
+                    </div>
+                    </div>
+                )}
+
+                {viewImage && (
+                    <div className="fixed inset-0 bg-black/90 flex items-center justify-center z-[200] p-4 print-hidden" onClick={() => setViewImage(null)}>
+                    <div className="relative max-w-4xl w-full">
+                        <button onClick={() => setViewImage(null)} className="absolute -top-10 right-0 text-white hover:text-red-400 flex items-center gap-1"><X/> ปิดรูปภาพ</button>
+                        <img src={viewImage} alt="หลักฐาน" className="w-full h-auto max-h-[85vh] object-contain rounded-lg shadow-2xl" onClick={e => e.stopPropagation()} />
+                    </div>
+                    </div>
+                )}
+            </div>
+            )
+        }
+
+        function Dashboard({ products, members, sales, expenses, settings, setActiveTab }) {
+            const arrProducts = Array.isArray(products) ? products : [];
+            const arrMembers = Array.isArray(members) ? members : [];
+            const arrSales = Array.isArray(sales) ? sales : [];
+            const arrExpenses = Array.isArray(expenses) ? expenses : [];
+
+            const lowStockProducts = arrProducts.filter(p => Number(p.stock) <= Number(p.minStock||0));
+            const totalSalesToday = arrSales.reduce((sum, sale) => sum + Number(sale.total||0), 0);
+            
+            const totalShareCapital = arrMembers.reduce((sum, m) => sum + Number(m.shares||0), 0) * Number(settings.sharePrice||0);
+            const totalSalesCash = arrSales.reduce((sum, s) => sum + Number(s.total||0), 0);
+            const totalExpensesCash = arrExpenses.reduce((sum, e) => sum + Number(e.amount||0), 0);
+            const currentDrawerCash = totalShareCapital + totalSalesCash - totalExpensesCash;
+
+            return (
+                <div className="space-y-6">
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+                    <StatCard title="ยอดขายวันนี้" value={`฿${totalSalesToday.toLocaleString()}`} icon={<BarChart2 className="text-blue-500" />} color="bg-blue-50 border-blue-100" />
+                    <StatCard title="เงินสดคงเหลือระบบ" value={`฿${currentDrawerCash.toLocaleString()}`} icon={<Wallet className="text-green-500" />} color="bg-green-50 border-green-100" />
+                    <StatCard title="สินค้าในระบบ" value={`${arrProducts.length} รายการ`} icon={<Package className="text-purple-500" />} color="bg-purple-50 border-purple-100" />
+                    <StatCard title="สมาชิกทั้งหมด" value={`${arrMembers.length} คน`} icon={<Users className="text-orange-500" />} color="bg-orange-50 border-orange-100" />
+                </div>
+                <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                    <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-5">
+                    <h3 className="text-lg font-bold text-gray-800 mb-4 flex items-center gap-2"><AlertCircle className="text-red-500" /> สินค้าใกล้หมดสต็อก</h3>
+                    {lowStockProducts.length > 0 ? (
+                        <div className="space-y-3">
+                        {lowStockProducts.map(p => (
+                            <div key={p.id} className="flex justify-between items-center p-3 bg-red-50 rounded-lg border border-red-100">
+                            <div className="flex items-center gap-3"><img src={p.image || 'https://placehold.co/100x100?text=No+Image'} className="w-10 h-10 rounded object-cover" /><div><p className="font-medium text-gray-800">{p.name}</p><p className="text-xs text-gray-500">บาร์โค้ด: {p.barcode}</p></div></div>
+                            <div className="text-right"><p className="text-red-600 font-bold">เหลือ {p.stock} ชิ้น</p><button onClick={() => setActiveTab('inventory')} className="text-xs text-blue-600 hover:underline">จัดการสต็อก</button></div>
+                            </div>
+                        ))}
+                        </div>
+                    ) : <div className="text-center text-gray-500 py-6">ไม่มีสินค้าใกล้หมดสต็อก 🎉</div>}
+                    </div>
+                    <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-5">
+                    <h3 className="text-lg font-bold text-gray-800 mb-4">เมนูลัด (Quick Actions)</h3>
+                    <div className="grid grid-cols-2 gap-4">
+                        <button onClick={() => setActiveTab('pos')} className="p-4 sm:p-6 bg-gradient-to-br from-green-500 to-green-600 rounded-xl text-white shadow hover:shadow-lg transition flex flex-col items-center justify-center gap-2"><ShoppingCart size={32} /><span className="font-bold text-sm sm:text-base">เปิดจุดขาย (POS)</span></button>
+                        <button onClick={() => setActiveTab('inventory')} className="p-4 sm:p-6 bg-gradient-to-br from-blue-500 to-blue-600 rounded-xl text-white shadow hover:shadow-lg transition flex flex-col items-center justify-center gap-2"><Plus size={32} /><span className="font-bold text-sm sm:text-base">เพิ่มสินค้าใหม่</span></button>
+                        <button onClick={() => setActiveTab('members')} className="p-4 sm:p-6 bg-gradient-to-br from-orange-400 to-orange-500 rounded-xl text-white shadow hover:shadow-lg transition flex flex-col items-center justify-center gap-2"><Users size={32} /><span className="font-bold text-sm sm:text-base">รับสมัครสมาชิก</span></button>
+                        <button onClick={() => setActiveTab('reports')} className="p-4 sm:p-6 bg-gradient-to-br from-purple-500 to-purple-600 rounded-xl text-white shadow hover:shadow-lg transition flex flex-col items-center justify-center gap-2"><BarChart2 size={32} /><span className="font-bold text-sm sm:text-base">ดูยอดขาย</span></button>
+                    </div>
+                    </div>
+                </div>
+                </div>
+            );
+        }
 
         function PrintReportModal({ sales, products, members, settings, expenses, onClose, dateRangeText }) {
             const [reporterName, setReporterName] = useState("");
@@ -1368,12 +1730,15 @@
             const [directorName, setDirectorName] = useState("");
             const [reportDate, setReportDate] = useState(new Date().toLocaleDateString('th-TH', { year: 'numeric', month: 'long', day: 'numeric' }));
 
-            // Recalculate everything specifically for the filtered data passed into the Print Modal
+            const arrSales = Array.isArray(sales) ? sales : [];
+            const arrExpenses = Array.isArray(expenses) ? expenses : [];
+            const arrMembers = Array.isArray(members) ? members : [];
+
             const productSalesCount = {};
             let totalSales = 0;
             let totalCost = 0;
             
-            sales.forEach(sale => {
+            arrSales.forEach(sale => {
                 totalSales += Number(sale.total||0);
                 if(Array.isArray(sale.items)){
                 sale.items.forEach(item => {
@@ -1385,11 +1750,10 @@
 
             const grossProfit = totalSales - totalCost;
 
-            // Members total liabilities (these don't get filtered by date, they are global status)
             let totalPayoutLiability = 0;
             let totalPaidOut = 0;
             let totalShareCapital = 0;
-            members.forEach(m => {
+            arrMembers.forEach(m => {
                 const shareValue = Number(m.shares||0) * Number(settings.sharePrice||0);
                 totalShareCapital += shareValue;
                 const dividend = shareValue * (Number(settings.dividendRate||0) / 100);
@@ -1398,28 +1762,22 @@
                 totalPaidOut += (Number(m.paidDividend||0) + Number(m.paidRefund||0));
             });
 
-            // For net profit of the *period*, we subtract the actual payouts made in this period.
-            const payoutExpensesInPeriod = expenses.filter(e => e.type === 'payout').reduce((sum, e) => sum + Number(e.amount||0), 0);
+            const payoutExpensesInPeriod = arrExpenses.filter(e => e.type === 'payout').reduce((sum, e) => sum + Number(e.amount||0), 0);
             const netProfit = grossProfit - payoutExpensesInPeriod;
             
-            const totalExpensesCash = expenses.reduce((sum, e) => sum + Number(e.amount||0), 0);
-            
-            // Available cash is global, but let's show the snapshot of the period if they want.
-            // Actually, drawer cash is a global concept. We'll stick to global cash.
-            const allSalesTotal = totalSales; // using filtered
+            const totalExpensesCash = arrExpenses.reduce((sum, e) => sum + Number(e.amount||0), 0);
             const availableCashFlow = totalShareCapital + totalSales - totalExpensesCash;
-
-            const topProducts = Object.entries(productSalesCount).map(([id, qty]) => ({ ...products.find(p => String(p.id) === String(id)), soldQty: qty })).sort((a, b) => b.soldQty - a.soldQty).slice(0, 10);
+            const topProducts = Object.entries(productSalesCount).map(([id, qty]) => ({ ...(products||[]).find(p => String(p.id) === String(id)), soldQty: qty })).sort((a, b) => b.soldQty - a.soldQty).slice(0, 10);
 
             return (
-                <div className="fixed inset-0 z-[200] flex bg-gray-900/90 print:bg-white print:static print:inset-auto overflow-hidden">
+                <div className="fixed inset-0 z-[200] flex bg-gray-900/90 print:absolute print:inset-0 print:bg-white overflow-hidden print-container">
                     <div className="w-80 bg-white p-6 overflow-y-auto print-hidden flex flex-col shadow-2xl z-10 shrink-0">
                         <div className="flex justify-between items-center mb-6">
                             <h2 className="font-bold text-xl text-gray-800">ตั้งค่าก่อนพิมพ์</h2>
                             <button onClick={onClose} className="p-2 bg-gray-100 hover:bg-red-100 hover:text-red-600 rounded-full transition"><X size={20}/></button>
                         </div>
                         <div className="space-y-4 flex-1">
-                            <div><label className="block text-xs font-bold text-gray-600 mb-1">วันที่ออกรายงาน (แสดงในกระดาษ)</label><input type="text" value={reportDate} onChange={e=>setReportDate(e.target.value)} className="w-full p-2 border rounded focus:ring-2 focus:ring-blue-500 outline-none text-sm"/></div>
+                            <div><label className="block text-xs font-bold text-gray-600 mb-1">วันที่ออกรายงาน</label><input type="text" value={reportDate} onChange={e=>setReportDate(e.target.value)} className="w-full p-2 border rounded focus:ring-2 focus:ring-blue-500 outline-none text-sm"/></div>
                             <div><label className="block text-xs font-bold text-gray-600 mb-1">ชื่อผู้รายงาน</label><input type="text" value={reporterName} onChange={e=>setReporterName(e.target.value)} className="w-full p-2 border rounded focus:ring-2 focus:ring-blue-500 outline-none text-sm"/></div>
                             <div><label className="block text-xs font-bold text-gray-600 mb-1">ชื่อผู้จัดการร้าน</label><input type="text" value={managerName} onChange={e=>setManagerName(e.target.value)} className="w-full p-2 border rounded focus:ring-2 focus:ring-blue-500 outline-none text-sm"/></div>
                             <div><label className="block text-xs font-bold text-gray-600 mb-1">ชื่อครูสหกรณ์ (กรรมการ)</label><input type="text" value={coopTeacherName} onChange={e=>setCoopTeacherName(e.target.value)} className="w-full p-2 border rounded focus:ring-2 focus:ring-blue-500 outline-none text-sm"/></div>
@@ -1440,10 +1798,8 @@
                         </button>
                     </div>
 
-                    {/* พื้นที่แสดงรายงาน (จะพิมพ์เฉพาะส่วนนี้) */}
-                    <div className="flex-1 overflow-y-auto bg-gray-200 p-8 print:p-0 print:bg-white print:overflow-visible flex justify-center items-start print-container">
+                    <div className="flex-1 overflow-y-auto bg-gray-200 p-8 print:p-0 print:bg-white flex justify-center items-start print:block">
                         <div id="printable-report" className="bg-white p-10 w-[210mm] min-h-[297mm] shadow-2xl print:shadow-none print:w-full print:p-0 print:min-h-0 mx-auto text-sm text-gray-900 font-sans">
-                            
                             <table className="w-full print-table print-no-border border-collapse">
                                 <thead>
                                     <tr>
@@ -1457,11 +1813,9 @@
                                         </td>
                                     </tr>
                                 </thead>
-                                
                                 <tbody>
                                     <tr>
                                         <td>
-                                            {/* เนื้อหารายงาน */}
                                             <div className="mb-6">
                                                 <h3 className="font-bold text-lg mb-3 bg-gray-100 p-2 border-l-4 border-blue-600">1. สรุปผลการดำเนินงาน (ในช่วงเวลาที่เลือก)</h3>
                                                 <div className="grid grid-cols-2 gap-4 mb-4">
@@ -1496,32 +1850,79 @@
                                                 </table>
                                             </div>
 
-                                            <div className="mb-8">
-                                                <h3 className="font-bold text-lg mb-3 bg-gray-100 p-2 border-l-4 border-yellow-500">3. สรุปสินค้าขายดี (ในรอบรายงาน)</h3>
-                                                <table className="w-full text-sm border border-gray-300 border-collapse">
+                                            {/* ตารางแสดงรายละเอียดการเบิกจ่ายที่เพิ่มเข้ามาใหม่ */}
+                                            <div className="mb-6">
+                                                <h3 className="font-bold text-lg mb-3 bg-gray-100 p-2 border-l-4 border-red-500">3. รายละเอียดการเบิกจ่าย / ยืมเงิน / จ่ายปันผล</h3>
+                                                <table className="w-full text-xs border border-gray-300 border-collapse">
                                                     <thead className="bg-gray-100 border-b border-gray-300">
-                                                        <tr><th className="py-2 px-3 text-left border-r border-gray-300">อันดับ</th><th className="py-2 px-3 text-left border-r border-gray-300">ชื่อสินค้า</th><th className="py-2 px-3 text-center border-r border-gray-300">หมวดหมู่</th><th className="py-2 px-3 text-right">จำนวนขาย (ชิ้น)</th></tr>
+                                                        <tr>
+                                                            <th className="py-2 px-3 text-left border-r border-gray-300">วันที่</th>
+                                                            <th className="py-2 px-3 text-left border-r border-gray-300">ประเภท</th>
+                                                            <th className="py-2 px-3 text-left border-r border-gray-300">ผู้รับเงิน</th>
+                                                            <th className="py-2 px-3 text-left border-r border-gray-300">รายละเอียด</th>
+                                                            <th className="py-2 px-3 text-right">จำนวนเงิน (฿)</th>
+                                                        </tr>
                                                     </thead>
                                                     <tbody>
-                                                        {topProducts.length === 0 ? <tr><td colSpan="4" className="text-center py-4">ไม่มีข้อมูลการขายในช่วงเวลานี้</td></tr> : 
-                                                        topProducts.map((p, i) => (
-                                                            <tr key={p.id} className="border-b border-gray-200">
-                                                                <td className="py-2 px-3 border-r border-gray-300 text-center">{i+1}</td>
-                                                                <td className="py-2 px-3 border-r border-gray-300 font-medium">{p.name}</td>
-                                                                <td className="py-2 px-3 border-r border-gray-300 text-center">{p.category}</td>
-                                                                <td className="py-2 px-3 text-right font-bold text-green-700">{p.soldQty}</td>
+                                                        {arrExpenses.length === 0 ? <tr><td colSpan="5" className="text-center py-4">ไม่มีรายการเบิกจ่ายในช่วงเวลานี้</td></tr> : 
+                                                        arrExpenses.map(exp => (
+                                                            <tr key={exp.id} className="border-b border-gray-200">
+                                                                <td className="py-2 px-3 border-r border-gray-300">{exp.date}</td>
+                                                                <td className="py-2 px-3 border-r border-gray-300">
+                                                                    {exp.type === 'purchase' ? 'ซื้อสินค้าเข้า' : 
+                                                                     exp.type === 'advance' ? 'ยืมเงินรองจ่าย' : 
+                                                                     exp.type === 'advance_clear' ? 'เคลียร์เงินยืม' :
+                                                                     exp.type === 'payout' ? 'จ่ายปันผล' :
+                                                                     exp.type === 'special' ? 'เบิกจ่ายพิเศษ' : exp.type}
+                                                                </td>
+                                                                <td className="py-2 px-3 border-r border-gray-300">{exp.receiver}</td>
+                                                                <td className="py-2 px-3 border-r border-gray-300">{exp.details}</td>
+                                                                <td className={`py-2 px-3 text-right font-bold ${Number(exp.amount) > 0 ? 'text-red-600' : 'text-green-600'}`}>
+                                                                    {Number(exp.amount) > 0 ? `- ฿${Number(exp.amount).toLocaleString()}` : `+ ฿${Math.abs(Number(exp.amount)).toLocaleString()}`}
+                                                                </td>
                                                             </tr>
                                                         ))}
                                                     </tbody>
                                                 </table>
                                             </div>
-                                            
+
+                                            {/* ตารางแสดงรายละเอียดการขายแต่ละบิล */}
+                                            <div className="mb-6">
+                                                <h3 className="font-bold text-lg mb-3 bg-gray-100 p-2 border-l-4 border-green-500">4. รายละเอียดการขายสินค้า (รายบิล)</h3>
+                                                <table className="w-full text-xs border border-gray-300 border-collapse">
+                                                    <thead className="bg-gray-100 border-b border-gray-300">
+                                                        <tr>
+                                                            <th className="py-2 px-3 text-left border-r border-gray-300">เลขที่บิล/วันที่</th>
+                                                            <th className="py-2 px-3 text-left border-r border-gray-300">พนักงานขาย</th>
+                                                            <th className="py-2 px-3 text-left border-r border-gray-300 w-1/2">รายการสินค้า (จำนวน)</th>
+                                                            <th className="py-2 px-3 text-right">ยอดรวม (฿)</th>
+                                                        </tr>
+                                                    </thead>
+                                                    <tbody>
+                                                        {arrSales.length === 0 ? <tr><td colSpan="4" className="text-center py-4">ไม่มีรายการขายในช่วงเวลานี้</td></tr> : 
+                                                        arrSales.map(sale => (
+                                                            <tr key={sale.id} className="border-b border-gray-200">
+                                                                <td className="py-2 px-3 border-r border-gray-300">{sale.id}<br/><span className="text-gray-500">{sale.date}</span></td>
+                                                                <td className="py-2 px-3 border-r border-gray-300">{sale.seller}</td>
+                                                                <td className="py-2 px-3 border-r border-gray-300">
+                                                                    <ul className="list-disc pl-4">
+                                                                        {Array.isArray(sale.items) && sale.items.map((it, idx) => (
+                                                                            <li key={idx}>{it.name} <span className="text-gray-500">(x{it.qty})</span></li>
+                                                                        ))}
+                                                                    </ul>
+                                                                </td>
+                                                                <td className="py-2 px-3 text-right font-bold text-green-700">฿{Number(sale.total).toLocaleString()}</td>
+                                                            </tr>
+                                                        ))}
+                                                    </tbody>
+                                                </table>
+                                            </div>
+
                                             <div className="h-8"></div>
                                         </td>
                                     </tr>
                                 </tbody>
 
-                                {/* TFOOT จะแสดงซ้ำอยู่ล่างสุดของทุกๆ หน้าที่ถูกพรินต์! */}
                                 <tfoot>
                                     <tr>
                                         <td>
@@ -1561,52 +1962,38 @@
 
         function Reports({ sales, products, members, settings, expenses, currentUser }) {
             const [showPrintModal, setShowPrintModal] = useState(false);
-            
-            // --- Date Filter State ---
-            const [reportPeriod, setReportPeriod] = useState('all'); // 'all', 'today', 'week', 'month', 'custom'
+            const [reportPeriod, setReportPeriod] = useState('all'); 
             const [startDate, setStartDate] = useState('');
             const [endDate, setEndDate] = useState('');
 
-            // Handle dropdown change to set quick dates
             useEffect(() => {
                 const today = new Date();
-                const formatDate = (d) => d.toISOString().split('T')[0];
+                const formatDate = (d) => {
+                    const y = d.getFullYear(); const m = String(d.getMonth() + 1).padStart(2, '0'); const day = String(d.getDate()).padStart(2, '0');
+                    return `${y}-${m}-${day}`;
+                };
 
-                if (reportPeriod === 'today') {
-                    setStartDate(formatDate(today));
-                    setEndDate(formatDate(today));
-                } else if (reportPeriod === 'week') {
+                if (reportPeriod === 'today') { setStartDate(formatDate(today)); setEndDate(formatDate(today)); } 
+                else if (reportPeriod === 'week') {
                     const firstDay = new Date(today.setDate(today.getDate() - today.getDay()));
                     const lastDay = new Date(today.setDate(today.getDate() - today.getDay() + 6));
-                    setStartDate(formatDate(firstDay));
-                    setEndDate(formatDate(lastDay));
+                    setStartDate(formatDate(firstDay)); setEndDate(formatDate(lastDay));
                 } else if (reportPeriod === 'month') {
                     const firstDay = new Date(today.getFullYear(), today.getMonth(), 1);
                     const lastDay = new Date(today.getFullYear(), today.getMonth() + 1, 0);
-                    setStartDate(formatDate(firstDay));
-                    setEndDate(formatDate(lastDay));
-                } else if (reportPeriod === 'all') {
-                    setStartDate('');
-                    setEndDate('');
-                }
+                    setStartDate(formatDate(firstDay)); setEndDate(formatDate(lastDay));
+                } else if (reportPeriod === 'all') { setStartDate(''); setEndDate(''); }
             }, [reportPeriod]);
 
-            // --- Apply Filter ---
             const filteredData = useMemo(() => {
-                let filteredSales = sales;
-                let filteredExpenses = expenses;
-
+                let filteredSales = Array.isArray(sales) ? sales : [];
+                let filteredExpenses = Array.isArray(expenses) ? expenses : [];
                 if (reportPeriod !== 'all' && startDate && endDate) {
                     const start = new Date(startDate); start.setHours(0,0,0,0);
                     const end = new Date(endDate); end.setHours(23,59,59,999);
-
-                    const filterFn = (item) => {
-                        const itemDate = parseThaiDate(item.date);
-                        return itemDate >= start && itemDate <= end;
-                    };
-
-                    filteredSales = sales.filter(filterFn);
-                    filteredExpenses = expenses.filter(filterFn);
+                    const filterFn = (item) => { const itemDate = parseThaiDate(item.date); return itemDate >= start && itemDate <= end; };
+                    filteredSales = filteredSales.filter(filterFn);
+                    filteredExpenses = filteredExpenses.filter(filterFn);
                 }
                 return { filteredSales, filteredExpenses };
             }, [sales, expenses, reportPeriod, startDate, endDate]);
@@ -1614,11 +2001,9 @@
             const fsales = filteredData.filteredSales;
             const fexpenses = filteredData.filteredExpenses;
 
-            // --- Calculate Totals based on filtered data ---
             const productSalesCount = {};
             let totalSales = 0;
             let totalCost = 0;
-            
             fsales.forEach(sale => {
                 totalSales += Number(sale.total||0);
                 if(Array.isArray(sale.items)){
@@ -1634,31 +2019,26 @@
             const netProfit = grossProfit - payoutExpensesInPeriod;
             const totalExpensesCash = fexpenses.reduce((sum, e) => sum + Number(e.amount||0), 0);
 
-            // Members liabilities (Global, not filtered by date as it's an ongoing balance)
             let totalPayoutLiability = 0;
             let totalPaidOut = 0;
             let totalShareCapital = 0;
-            members.forEach(m => {
+            const arrMembers = Array.isArray(members) ? members : [];
+            arrMembers.forEach(m => {
                 const shareValue = Number(m.shares||0) * Number(settings.sharePrice||0);
                 totalShareCapital += shareValue;
-                const dividend = shareValue * (Number(settings.dividendRate||0) / 100);
-                const refund = Number(m.totalSpent||0) * (Number(settings.refundRate||0) / 100);
-                totalPayoutLiability += (dividend + refund);
+                totalPayoutLiability += (shareValue * (Number(settings.dividendRate||0) / 100)) + (Number(m.totalSpent||0) * (Number(settings.refundRate||0) / 100));
                 totalPaidOut += (Number(m.paidDividend||0) + Number(m.paidRefund||0));
             });
 
             const availableCashFlow = totalShareCapital + totalSales - totalExpensesCash;
-            const topProducts = Object.entries(productSalesCount).map(([id, qty]) => ({ ...products.find(p => String(p.id) === String(id)), soldQty: qty })).sort((a, b) => b.soldQty - a.soldQty).slice(0, 5);
+            const topProducts = Object.entries(productSalesCount).map(([id, qty]) => ({ ...(Array.isArray(products)?products:[]).find(p => String(p.id) === String(id)), soldQty: qty })).sort((a, b) => b.soldQty - a.soldQty).slice(0, 5);
 
-            // Text helper for report header
             const dateRangeText = reportPeriod === 'all' ? 'ตั้งแต่เริ่มเปิดระบบทั้งหมด' 
                 : reportPeriod === 'today' ? `รายวัน (วันที่ ${new Date(startDate).toLocaleDateString('th-TH')})`
                 : `ระหว่าง ${new Date(startDate).toLocaleDateString('th-TH')} - ${new Date(endDate).toLocaleDateString('th-TH')}`;
 
             return (
                 <div className="space-y-6">
-                    
-                {/* ส่วนหัวพร้อมตัวกรองและปุ่ม Print */}
                 <div className="flex flex-col lg:flex-row justify-between items-start lg:items-center gap-4 bg-white p-4 rounded-xl shadow-sm border border-gray-100">
                     <div className="flex flex-col sm:flex-row items-start sm:items-center gap-3 w-full lg:w-auto">
                         <div className="flex items-center gap-2 bg-blue-50 px-3 py-2 rounded-lg border border-blue-100">
@@ -1671,7 +2051,6 @@
                                 <option value="custom">กำหนดช่วงวัน/เทอม/ปี...</option>
                             </select>
                         </div>
-                        
                         {reportPeriod === 'custom' && (
                             <div className="flex items-center gap-2 animate-in fade-in">
                                 <input type="date" value={startDate} onChange={e=>setStartDate(e.target.value)} className="border border-gray-300 rounded px-2 py-1 text-sm outline-none"/>
@@ -1680,7 +2059,6 @@
                             </div>
                         )}
                     </div>
-
                     <button onClick={() => setShowPrintModal(true)} className="bg-blue-600 text-white px-5 py-2.5 rounded-lg hover:bg-blue-700 transition flex items-center justify-center gap-2 shadow-sm font-bold w-full lg:w-auto shrink-0">
                         <Printer size={20} /> พิมพ์รายงานกระดาษ
                     </button>
@@ -1688,7 +2066,6 @@
 
                 <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6">
                     <h3 className="text-lg font-bold text-gray-800 mb-6 flex items-center gap-2"><Wallet className="text-indigo-500" /> สรุปผลการดำเนินงาน ({dateRangeText})</h3>
-                    
                     <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
                         <div className="bg-gray-50 border border-gray-200 rounded-xl p-5 relative overflow-hidden">
                             <p className="text-sm text-gray-600 font-bold mb-1 relative z-10">ยอดขายรวม</p>
@@ -1769,7 +2146,6 @@
             );
         }
 
-        // --- Other Components remain the same as previously defined (UserManagement, etc.) ---
         function UserManagement({ users, setUsers, addLog }) {
             const [modalMode, setModalMode] = useState(null); 
             const [editingUser, setEditingUser] = useState({ id: '', username: '', password: '', name: '', role: 'teacher' });
@@ -1782,14 +2158,15 @@
                 if (!editingUser.username || !editingUser.password || !editingUser.name) return alert('กรุณากรอกข้อมูลให้ครบถ้วน');
 
                 let newUsers;
+                const arrUsers = Array.isArray(users) ? users : [];
                 if (modalMode === 'add') {
-                if (users.find(u => String(u.username) === String(editingUser.username))) return alert('ชื่อผู้ใช้งานนี้มีอยู่ในระบบแล้ว!');
+                if (arrUsers.find(u => String(u.username) === String(editingUser.username))) return alert('ชื่อผู้ใช้งานนี้มีอยู่ในระบบแล้ว!');
                 const newId = 'U' + String(Date.now()).slice(-4);
-                newUsers = [...users, { ...editingUser, id: newId }];
+                newUsers = [...arrUsers, { ...editingUser, id: newId }];
                 addLog('เพิ่มผู้ใช้ใหม่', `เพิ่มบัญชี ${editingUser.username} สิทธิ์ ${editingUser.role}`);
                 } else {
-                if (users.find(u => String(u.username) === String(editingUser.username) && String(u.id) !== String(editingUser.id))) return alert('ชื่อผู้ใช้งานนี้มีอยู่ในระบบแล้ว!');
-                newUsers = users.map(u => String(u.id) === String(editingUser.id) ? editingUser : u);
+                if (arrUsers.find(u => String(u.username) === String(editingUser.username) && String(u.id) !== String(editingUser.id))) return alert('ชื่อผู้ใช้งานนี้มีอยู่ในระบบแล้ว!');
+                newUsers = arrUsers.map(u => String(u.id) === String(editingUser.id) ? editingUser : u);
                 addLog('แก้ไขผู้ใช้', `แก้ไขบัญชี ${editingUser.username} (รหัสผ่าน/สิทธิ์)`);
                 }
                 setUsers(newUsers);
@@ -1799,7 +2176,7 @@
             const handleDeleteUser = (id) => {
                 if (window.confirm('ลบบัญชีผู้ใช้นี้?')) {
                 if (id === 'U001') return alert('ไม่สามารถลบบัญชีหลักได้');
-                const newUsers = users.filter(u => String(u.id) !== String(id));
+                const newUsers = (Array.isArray(users) ? users : []).filter(u => String(u.id) !== String(id));
                 setUsers(newUsers);
                 addLog('ลบผู้ใช้', `ลบบัญชี ID: ${id}`);
                 }
@@ -1815,7 +2192,7 @@
                     <table className="w-full text-left min-w-[600px]">
                     <thead className="bg-gray-50 border-b"><tr><th className="p-4">รหัส</th><th className="p-4">ชื่อ</th><th className="p-4">Username</th><th className="p-4">สิทธิ์</th><th className="p-4 text-center">จัดการ</th></tr></thead>
                     <tbody className="divide-y divide-gray-100">
-                        {users.map(u => (
+                        {(Array.isArray(users) ? users : []).map(u => (
                         <tr key={u.id}>
                             <td className="p-4 text-gray-500 font-mono">{u.id}</td><td className="p-4 font-bold">{u.name}</td><td className="p-4 text-gray-600 bg-gray-100/50">{u.username}</td>
                             <td className="p-4"><span className={`px-3 py-1 rounded-full text-xs font-bold border ${u.role === 'admin' ? 'bg-red-50 text-red-600' : u.role === 'manager' ? 'bg-purple-50 text-purple-600' : 'bg-blue-50 text-blue-600'}`}>{u.role}</span></td>
