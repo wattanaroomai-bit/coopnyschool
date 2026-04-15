@@ -82,6 +82,7 @@
         const UploadCloud = (p) => <Icon name="cloud-arrow-up" {...p} />;
         const FileImage = (p) => <Icon name="image" {...p} />;
         const Loader2 = (p) => <Icon name="spinner" className={`animate-spin ${p.className||''}`} {...p} />;
+        const ArrowsClockwise = (p) => <Icon name="arrows-clockwise" {...p} />;
 
 
         // ฟังก์ชันช่วยเรียงลำดับชั้นเรียน
@@ -151,13 +152,17 @@
             }
         };
 
-        // 2. ฟังก์ชันส่งคำสั่ง POST ไปยัง Google Sheet (Sync)
+        // 2. ฟังก์ชันส่งคำสั่ง POST ไปยัง Google Sheet (Sync) อย่างปลอดภัย
         const syncToCloud = async (action, payload) => {
             try {
-            await fetch(GAS_URL, {
+            fetch(GAS_URL, {
                 method: "POST",
+                mode: "no-cors", // แก้ปัญหา CORS แบบโปร่งใส (ช่วยให้คำสั่งส่งไปถึง GAS ได้แน่นอนแม้จะ Refresh)
+                headers: {
+                    "Content-Type": "text/plain",
+                },
                 body: JSON.stringify({ action, payload })
-            });
+            }).catch((e) => console.error("Sync Error Background:", e));
             } catch (e) {
             console.error("Sync Error:", e);
             }
@@ -274,12 +279,9 @@
             setCheckoutModal(false);
             setReceiptModal(true);
             
-            // แจ้งระบบหลังบ้านให้บันทึกบิลนี้
+            // 🔴 แจ้งระบบหลังบ้านให้บันทึกบิลนี้อย่างเดียวพอ (Apps Script จะไปหักสต็อกและยอดสะสมสมาชิกให้เอง)
+            // เพื่อป้องกันปัญหาบันทึกซ้อนทับกัน (Race condition) ทำให้ค่าหายเมื่อรีเฟรช
             syncToCloud("ADD_SALE", newSale);
-            // อัปเดตคลังใหม่ทั้งหมดไปที่หลังบ้าน (เผื่อการหักสต็อก)
-            syncToCloud("SYNC_PRODUCTS", updatedProducts);
-            // หากมียอดซื้อสะสม ก็อัปเดตสมาชิกไปด้วย
-            if (posMemberId) syncToCloud("SYNC_MEMBERS", updatedMembers);
 
             addLog('ทำรายการขาย', `บิล ${newSale.id} ยอด ฿${cartTotal} (ผู้ซื้อ: ${memberName})`);
             setCart([]);
@@ -301,7 +303,7 @@
 
         // --- โหมดหน้าจอสำหรับสมาชิก ---
         if (appMode === 'member_portal') {
-            return <MemberPortalView members={members} settings={settings} onExit={() => setAppMode('main')} />;
+            return <MemberPortalView members={members} settings={settings} onExit={() => setAppMode('main')} onRefresh={fetchDataFromCloud} isRefreshing={isInitializing} />;
         }
 
         const renderTabContent = () => {
@@ -427,11 +429,6 @@
                     isSidebarOpen ? <button onClick={() => setShowLoginModal(true)} className="flex items-center justify-center gap-2 w-full py-3 bg-white text-green-800 font-bold hover:bg-green-100 rounded-lg transition shadow-md whitespace-nowrap overflow-hidden animate-in fade-in"><Lock size={18} /> ระบบจัดการ (แอดมิน)</button>
                     : <button onClick={() => setShowLoginModal(true)} className="flex items-center justify-center w-12 h-12 mx-auto bg-white text-green-800 font-bold hover:bg-green-100 rounded-lg transition shadow-md" title="ระบบจัดการ (แอดมิน)"><Lock size={20} /></button>
                 )}
-                {isSidebarOpen && (
-                    <div className="mt-4 pt-4 border-t border-green-600/50 text-center text-xs text-green-300/80 font-medium">
-                    พัฒนาระบบโดย<br/>ครูวัฒนา รู้ใหม่
-                    </div>
-                )}
                 </div>
             </div>
 
@@ -452,8 +449,12 @@
                     </h2>
                 </div>
                 <div className="flex items-center gap-4">
+                    <button onClick={fetchDataFromCloud} className="flex items-center gap-2 px-3 py-1.5 bg-blue-50 text-blue-600 rounded-lg hover:bg-blue-100 transition shadow-sm text-sm font-bold border border-blue-200" title="ดึงข้อมูลล่าสุดจากระบบ">
+                        <ArrowsClockwise size={16} /> <span className="hidden sm:inline">รีเฟรชข้อมูล</span>
+                    </button>
+                    
                     {!currentUser && activeTab === 'pos' && posCashier && (
-                    <div className="hidden md:flex items-center gap-3">
+                    <div className="hidden md:flex items-center gap-3 ml-2 border-l pl-4">
                         <span className="text-sm font-medium text-blue-700 bg-blue-50 px-3 py-1.5 rounded-full flex items-center gap-2 border border-blue-200 shadow-sm">
                         <div className="w-5 h-5 bg-blue-200 rounded-full flex items-center justify-center text-blue-800 text-xs font-bold">{posCashier.name.charAt(0)}</div>
                         พนักงานขาย: {posCashier.name}
@@ -461,9 +462,9 @@
                         <button onClick={handlePosLogout} className="text-xs font-bold text-red-500 hover:text-red-700 hover:bg-red-50 px-3 py-1.5 rounded-lg transition border border-red-200 shadow-sm">ปิดกะ (ออก)</button>
                     </div>
                     )}
-                    <div className="flex items-center gap-2">
-                    <span className="hidden sm:inline text-sm text-gray-600">สถานะ:</span>
-                    <span className="px-2 py-1 bg-green-100 text-green-700 text-xs rounded-full flex items-center gap-1 font-medium"><CheckCircle size={12} /> <span className="hidden sm:inline">เชื่อมต่อ Cloud แล้ว</span></span>
+                    <div className="hidden sm:flex items-center gap-2 ml-2">
+                        <span className="text-sm text-gray-600">สถานะ:</span>
+                        <span className="px-2 py-1 bg-green-100 text-green-700 text-xs rounded-full flex items-center gap-1 font-medium"><CheckCircle size={12} /> <span className="hidden lg:inline">เชื่อมต่อแล้ว</span></span>
                     </div>
                 </div>
                 </header>
@@ -630,7 +631,7 @@
 
         // --- Components ย่อย ---
 
-        function MemberPortalView({ members, settings, onExit }) {
+        function MemberPortalView({ members, settings, onExit, onRefresh, isRefreshing }) {
         const [searchId, setSearchId] = useState('');
         const [memberData, setMemberData] = useState(null);
         const [errorMsg, setErrorMsg] = useState('');
@@ -647,6 +648,7 @@
             <div className="w-full max-w-md bg-white rounded-3xl shadow-xl overflow-hidden relative z-10 border border-gray-100">
                 <div className="bg-gradient-to-r from-purple-600 to-blue-600 p-6 text-white text-center relative">
                 <button onClick={onExit} className="absolute top-4 left-4 p-2 bg-white/20 hover:bg-white/30 rounded-full transition"><ArrowLeft size={20} /></button>
+                <button onClick={onRefresh} className="absolute top-4 right-4 p-2 bg-white/20 hover:bg-white/30 rounded-full transition" title="รีเฟรชข้อมูลล่าสุด"><ArrowsClockwise size={20} className={isRefreshing ? "animate-spin" : ""} /></button>
                 <div className="w-16 h-16 bg-white rounded-full flex items-center justify-center mx-auto mb-4 shadow-lg border-4 border-white/20 overflow-hidden">
                     {settings.coopLogo ? <img src={settings.coopLogo} className="w-full h-full object-cover" alt="Logo"/> : <Wallet className="text-purple-600" size={32} />}
                 </div>
