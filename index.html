@@ -358,7 +358,7 @@
             case 'members': return <Members members={members} setMembers={(data) => { setMembers(data); syncToCloud("SYNC_MEMBERS", data); }} settings={settings} addLog={addLog} />;
             case 'expenses': return (currentUser?.role === 'admin' || currentUser?.role === 'manager') ? <ExpenseManagement expenses={expenses} setExpenses={(data, newExp) => { setExpenses(data); if(newExp) syncToCloud("ADD_EXPENSE", newExp); }} sales={sales} members={members} settings={settings} addLog={addLog} currentUser={currentUser} /> : <div>ไม่มีสิทธิ์เข้าถึง</div>;
             case 'reports': return <Reports sales={sales} products={products} members={members} settings={settings} expenses={expenses} />;
-            case 'settings': return (currentUser?.role === 'admin' || currentUser?.role === 'manager') ? <SettingsTab settings={settings} setSettings={setSettings} onSave={() => syncToCloud("UPDATE_SETTINGS", settings)} logs={logs} addLog={addLog} /> : <div>ไม่มีสิทธิ์เข้าถึง</div>;
+            case 'settings': return (currentUser?.role === 'admin' || currentUser?.role === 'manager') ? <SettingsTab settings={settings} setSettings={setSettings} onSave={(newSettings) => syncToCloud("UPDATE_SETTINGS", newSettings || settings)} logs={logs} addLog={addLog} /> : <div>ไม่มีสิทธิ์เข้าถึง</div>;
             case 'users-manage': return currentUser?.role === 'admin' ? <UserManagement users={users} setUsers={(data) => { setUsers(data); syncToCloud("SYNC_USERS", data); }} addLog={addLog}/> : <div>ไม่มีสิทธิ์เข้าถึง</div>;
             default: return <POS products={products} cart={cart} setCart={setCart} barcodeInput={barcodeInput} setBarcodeInput={setBarcodeInput} handleBarcodeSubmit={handleBarcodeSubmit} setCheckoutModal={setCheckoutModal} cashier={currentUser || posCashier} posMemberId={posMemberId} setPosMemberId={setPosMemberId} members={members} onOpenSearch={() => setMemberModalTarget('buyer')} settings={settings} />;
             }
@@ -1071,6 +1071,167 @@
         );
         }
 
+        function SettingsTab({ settings, setSettings, onSave, logs, addLog }) {
+        const [urlBase, setUrlBase] = useState("");
+        const [pendingLogo, setPendingLogo] = useState(null); 
+        
+        useEffect(() => {
+            setUrlBase(window.location.origin + window.location.pathname);
+        }, []);
+
+        const handleSaveSettings = (e) => {
+            e.preventDefault();
+            onSave(settings); 
+            addLog('เปลี่ยนการตั้งค่า', `อัปเดตข้อมูลสหกรณ์และอัตราปันผล`);
+            alert('บันทึกการตั้งค่าสำเร็จ');
+        };
+
+        const handleLogoSelect = (e) => {
+            const file = e.target.files[0];
+            if (file) {
+                const reader = new FileReader();
+                reader.onload = (event) => {
+                    const img = new Image();
+                    img.onload = () => {
+                        const canvas = document.createElement('canvas');
+                        const MAX_SIZE = 200; 
+                        let width = img.width;
+                        let height = img.height;
+                        
+                        if (width > height) {
+                            if (width > MAX_SIZE) {
+                                height *= MAX_SIZE / width;
+                                width = MAX_SIZE;
+                            }
+                        } else {
+                            if (height > MAX_SIZE) {
+                                width *= MAX_SIZE / height;
+                                height = MAX_SIZE;
+                            }
+                        }
+                        canvas.width = width;
+                        canvas.height = height;
+                        const ctx = canvas.getContext('2d');
+                        ctx.fillStyle = '#FFFFFF';
+                        ctx.fillRect(0, 0, canvas.width, canvas.height);
+                        ctx.drawImage(img, 0, 0, width, height);
+                        
+                        const compressedDataUrl = canvas.toDataURL('image/jpeg', 0.8);
+                        setPendingLogo(compressedDataUrl);
+                    };
+                    img.src = event.target.result;
+                };
+                reader.readAsDataURL(file);
+            }
+        };
+
+        const handleConfirmLogo = () => {
+            if (!pendingLogo) return;
+            const updatedSettings = { ...settings, coopLogo: pendingLogo };
+            setSettings(updatedSettings);
+            onSave(updatedSettings); 
+            setPendingLogo(null);
+            addLog('เปลี่ยนโลโก้', 'อัปโหลดโลโก้สหกรณ์ใหม่สำเร็จ');
+            alert('อัปโหลดและบันทึกโลโก้สำเร็จ!');
+        };
+
+        const copyMemberLink = () => {
+            const dummyLink = "https://your-github-username.github.io/coop-system/";
+            alert("คัดลอกลิงก์ให้สมาชิกเรียบร้อยแล้ว: \n\n" + (urlBase || dummyLink));
+        };
+
+        return (
+            <div className="space-y-6">
+            <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6 max-w-4xl">
+                <h3 className="text-lg font-bold text-gray-800 mb-4 flex items-center gap-2"><Settings className="text-gray-500"/> ข้อมูลและตั้งค่าสหกรณ์</h3>
+                <form onSubmit={handleSaveSettings} className="space-y-6">
+                <div className="flex flex-col md:flex-row gap-6 items-start">
+                    <div className="flex flex-col items-center gap-3 shrink-0">
+                        <div className="w-32 h-32 border-2 border-dashed border-gray-300 rounded-xl flex items-center justify-center relative overflow-hidden bg-gray-50">
+                            {(pendingLogo || settings.coopLogo) ? (
+                            <img src={pendingLogo || settings.coopLogo} className="w-full h-full object-cover" alt="Logo" />
+                            ) : (
+                            <div className="text-center text-gray-400"><UploadCloud size={24} className="mx-auto mb-1"/><span className="text-xs">ไม่มีรูป</span></div>
+                            )}
+                        </div>
+                        <div className="flex flex-col gap-2 w-full min-w-[140px]">
+                            <label className="bg-white border border-gray-300 text-gray-700 px-3 py-1.5 rounded-lg text-sm font-medium text-center cursor-pointer hover:bg-gray-100 transition shadow-sm w-full block">
+                              เลือกรูปภาพ
+                              <input type="file" accept="image/*" onChange={handleLogoSelect} className="hidden" />
+                            </label>
+                            {pendingLogo && (
+                               <button type="button" onClick={handleConfirmLogo} className="bg-green-600 text-white px-3 py-1.5 rounded-lg text-sm font-bold hover:bg-green-700 transition shadow-sm w-full flex items-center justify-center gap-1">
+                                 <CheckCircle size={16}/> ยืนยันการอัปภาพ
+                               </button>
+                            )}
+                        </div>
+                    </div>
+                    <div className="flex-1 w-full">
+                        <label className="block text-sm font-bold text-gray-800 mb-1">ชื่อสหกรณ์ / ร้านค้า</label>
+                        <input type="text" value={settings.coopName || ''} onChange={e=>setSettings({...settings, coopName: e.target.value})} className="w-full border-2 border-gray-200 rounded-lg p-3 focus:border-blue-500 outline-none font-bold text-gray-800" placeholder="เช่น สหกรณ์โรงเรียนบ้านนกยูง..." />
+                        <p className="text-xs text-gray-500 mt-2">ข้อมูลส่วนนี้จะถูกแสดงที่เมนูแถบด้านซ้าย ในใบเสร็จ และหน้าตรวจสอบยอดสำหรับสมาชิก</p>
+                    </div>
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-6 pt-4 border-t border-gray-100">
+                    <div className="bg-green-50 p-4 rounded-xl border border-green-100">
+                    <label className="block text-sm font-bold text-green-800 mb-2">ราคาต่อหุ้น (บาท)</label>
+                    <p className="text-xs text-green-600 mb-2">มูลค่าของหุ้น 1 หน่วย</p>
+                    <input type="number" value={settings.sharePrice} onChange={e=>setSettings({...settings, sharePrice: Number(e.target.value)})} className="w-full border-2 border-green-200 rounded p-2 focus:border-green-500 outline-none font-bold text-lg text-green-900" />
+                    </div>
+                    <div className="bg-purple-50 p-4 rounded-xl border border-purple-100">
+                    <label className="block text-sm font-bold text-purple-800 mb-2">อัตราปันผลค่าหุ้น (%)</label>
+                    <p className="text-xs text-purple-600 mb-2">ใช้คำนวณ: (หุ้น x ราคา) x อัตรา %</p>
+                    <input type="number" step="0.1" value={settings.dividendRate} onChange={e=>setSettings({...settings, dividendRate: Number(e.target.value)})} className="w-full border-2 border-purple-200 rounded p-2 focus:border-purple-500 outline-none font-bold text-lg text-purple-900" />
+                    </div>
+                    <div className="bg-blue-50 p-4 rounded-xl border border-blue-100">
+                    <label className="block text-sm font-bold text-blue-800 mb-2">อัตราเงินเฉลี่ยคืน (%)</label>
+                    <p className="text-xs text-blue-600 mb-2">ใช้คำนวณ: ยอดซื้อสะสม x อัตรา %</p>
+                    <input type="number" step="0.1" value={settings.refundRate} onChange={e=>setSettings({...settings, refundRate: Number(e.target.value)})} className="w-full border-2 border-blue-200 rounded p-2 focus:border-blue-500 outline-none font-bold text-lg text-blue-900" />
+                    </div>
+                </div>
+                <button type="submit" className="bg-gray-800 text-white px-8 py-3 rounded-lg font-bold hover:bg-gray-900 transition shadow-sm w-full md:w-auto">บันทึกการตั้งค่าทั้งหมด</button>
+                </form>
+            </div>
+
+            <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6 max-w-4xl">
+                <h3 className="text-lg font-bold text-gray-800 mb-4 flex items-center gap-2"><ExternalLink className="text-blue-500"/> ลิงก์ระบบตรวจสอบยอดสำหรับสมาชิก</h3>
+                <p className="text-sm text-gray-600 mb-4">สมาชิกสามารถเข้าสู่เว็บไซต์ระบบได้โดยตรง เมื่อกดปุ่ม <b>สำหรับสมาชิก: ตรวจสอบยอด</b> ในหน้าแรก จะสามารถกรอกรหัสตนเองได้ทันทีโดยไม่ต้องเข้าสู่ระบบด้วยรหัสผ่านแอดมิน</p>
+                <div className="flex gap-2">
+                    <input type="text" readOnly value={urlBase || "กำลังโหลด..."} className="flex-1 bg-gray-50 border border-gray-200 rounded-lg p-3 text-sm text-gray-500 font-mono outline-none" />
+                    <button onClick={copyMemberLink} className="bg-blue-600 text-white px-6 py-2 rounded-lg font-medium hover:bg-blue-700 transition flex-shrink-0">คัดลอกลิงก์เว็บ</button>
+                </div>
+            </div>
+
+            <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6">
+                <h3 className="text-lg font-bold text-gray-800 mb-4 flex items-center gap-2"><History className="text-blue-500"/> ประวัติการใช้งานระบบ (Audit Log)</h3>
+                <div className="overflow-x-auto border rounded-lg">
+                <table className="w-full text-left text-sm min-w-[800px]">
+                    <thead className="bg-gray-50 border-b">
+                    <tr>
+                        <th className="p-3 font-medium">วัน-เวลา</th>
+                        <th className="p-3 font-medium">บัญชีผู้ใช้</th>
+                        <th className="p-3 font-medium">การกระทำ</th>
+                        <th className="p-3 font-medium">รายละเอียด</th>
+                    </tr>
+                    </thead>
+                    <tbody className="divide-y divide-gray-100">
+                    {logs.map(log => (
+                        <tr key={log.id} className="hover:bg-gray-50">
+                        <td className="p-3 text-gray-500 whitespace-nowrap">{log.date}</td>
+                        <td className="p-3 font-medium text-blue-600">{log.user}</td>
+                        <td className="p-3 font-bold text-gray-800">{log.action}</td>
+                        <td className="p-3 text-gray-600">{log.details}</td>
+                        </tr>
+                    ))}
+                    </tbody>
+                </table>
+                </div>
+            </div>
+            </div>
+        );
+        }
+
         function ExpenseManagement({ expenses, setExpenses, sales, members, settings, addLog, currentUser }) {
         const [modalMode, setModalMode] = useState(null); 
         const [form, setForm] = useState({ amount: '', receiver: '', details: '', image: null });
@@ -1085,7 +1246,28 @@
             const file = e.target.files[0];
             if (file) {
             const reader = new FileReader();
-            reader.onloadend = () => setForm({ ...form, image: reader.result });
+            reader.onload = (event) => {
+                const img = new Image();
+                img.onload = () => {
+                    const canvas = document.createElement('canvas');
+                    const MAX_SIZE = 800; // สำหรับใบเสร็จ อนุญาตให้ใหญ่ได้หน่อย (800px)
+                    let width = img.width;
+                    let height = img.height;
+                    
+                    if (width > height) {
+                        if (width > MAX_SIZE) { height *= MAX_SIZE / width; width = MAX_SIZE; }
+                    } else {
+                        if (height > MAX_SIZE) { width *= MAX_SIZE / height; height = MAX_SIZE; }
+                    }
+                    canvas.width = width;
+                    canvas.height = height;
+                    const ctx = canvas.getContext('2d');
+                    ctx.drawImage(img, 0, 0, width, height);
+                    const compressedDataUrl = canvas.toDataURL('image/jpeg', 0.6); // บีบอัดเยอะหน่อย
+                    setForm({ ...form, image: compressedDataUrl });
+                };
+                img.src = event.target.result;
+            };
             reader.readAsDataURL(file);
             }
         };
@@ -1223,264 +1405,6 @@
             )}
             </div>
         )
-        }
-
-        function Dashboard({ products, members, sales, expenses, settings, setActiveTab }) {
-        const lowStockProducts = products.filter(p => p.stock <= p.minStock);
-        const totalSalesToday = sales.reduce((sum, sale) => sum + sale.total, 0);
-        
-        const totalShareCapital = members.reduce((sum, m) => sum + m.shares, 0) * settings.sharePrice;
-        const totalSalesCash = sales.reduce((sum, s) => sum + s.total, 0);
-        const totalExpensesCash = expenses.reduce((sum, e) => sum + e.amount, 0);
-        const currentDrawerCash = totalShareCapital + totalSalesCash - totalExpensesCash;
-
-        return (
-            <div className="space-y-6">
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-                <StatCard title="ยอดขายวันนี้" value={`฿${totalSalesToday.toLocaleString()}`} icon={<BarChart2 className="text-blue-500" />} color="bg-blue-50 border-blue-100" />
-                <StatCard title="เงินสดคงเหลือระบบ" value={`฿${currentDrawerCash.toLocaleString()}`} icon={<Wallet className="text-green-500" />} color="bg-green-50 border-green-100" />
-                <StatCard title="สินค้าในระบบ" value={`${products.length} รายการ`} icon={<Package className="text-purple-500" />} color="bg-purple-50 border-purple-100" />
-                <StatCard title="สมาชิกทั้งหมด" value={`${members.length} คน`} icon={<Users className="text-orange-500" />} color="bg-orange-50 border-orange-100" />
-            </div>
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-                <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-5">
-                <h3 className="text-lg font-bold text-gray-800 mb-4 flex items-center gap-2"><AlertCircle className="text-red-500" /> สินค้าใกล้หมดสต็อก</h3>
-                {lowStockProducts.length > 0 ? (
-                    <div className="space-y-3">
-                    {lowStockProducts.map(p => (
-                        <div key={p.id} className="flex justify-between items-center p-3 bg-red-50 rounded-lg border border-red-100">
-                        <div className="flex items-center gap-3"><img src={p.image} className="w-10 h-10 rounded object-cover" /><div><p className="font-medium text-gray-800">{p.name}</p><p className="text-xs text-gray-500">บาร์โค้ด: {p.barcode}</p></div></div>
-                        <div className="text-right"><p className="text-red-600 font-bold">เหลือ {p.stock} ชิ้น</p><button onClick={() => setActiveTab('inventory')} className="text-xs text-blue-600 hover:underline">จัดการสต็อก</button></div>
-                        </div>
-                    ))}
-                    </div>
-                ) : <div className="text-center text-gray-500 py-6">ไม่มีสินค้าใกล้หมดสต็อก 🎉</div>}
-                </div>
-                <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-5">
-                <h3 className="text-lg font-bold text-gray-800 mb-4">เมนูลัด (Quick Actions)</h3>
-                <div className="grid grid-cols-2 gap-4">
-                    <button onClick={() => setActiveTab('pos')} className="p-4 sm:p-6 bg-gradient-to-br from-green-500 to-green-600 rounded-xl text-white shadow hover:shadow-lg transition flex flex-col items-center justify-center gap-2"><ShoppingCart size={32} /><span className="font-bold text-sm sm:text-base">เปิดจุดขาย (POS)</span></button>
-                    <button onClick={() => setActiveTab('inventory')} className="p-4 sm:p-6 bg-gradient-to-br from-blue-500 to-blue-600 rounded-xl text-white shadow hover:shadow-lg transition flex flex-col items-center justify-center gap-2"><Plus size={32} /><span className="font-bold text-sm sm:text-base">เพิ่มสินค้าใหม่</span></button>
-                    <button onClick={() => setActiveTab('members')} className="p-4 sm:p-6 bg-gradient-to-br from-orange-400 to-orange-500 rounded-xl text-white shadow hover:shadow-lg transition flex flex-col items-center justify-center gap-2"><Users size={32} /><span className="font-bold text-sm sm:text-base">รับสมัครสมาชิก</span></button>
-                    <button onClick={() => setActiveTab('reports')} className="p-4 sm:p-6 bg-gradient-to-br from-purple-500 to-purple-600 rounded-xl text-white shadow hover:shadow-lg transition flex flex-col items-center justify-center gap-2"><BarChart2 size={32} /><span className="font-bold text-sm sm:text-base">ดูยอดขาย</span></button>
-                </div>
-                </div>
-            </div>
-            </div>
-        );
-        }
-
-        function Reports({ sales, products, members, settings, expenses }) {
-        const productSalesCount = {};
-        
-        let totalSales = 0;
-        let totalCost = 0;
-        
-        sales.forEach(sale => {
-            totalSales += sale.total;
-            sale.items.forEach(item => {
-            productSalesCount[item.id] = (productSalesCount[item.id] || 0) + item.qty;
-            totalCost += (item.cost * item.qty);
-            });
-        });
-
-        const grossProfit = totalSales - totalCost;
-
-        let totalPayout = 0;
-        let totalShareCapital = 0;
-        members.forEach(m => {
-            const shareValue = m.shares * settings.sharePrice;
-            totalShareCapital += shareValue;
-            const dividend = shareValue * (settings.dividendRate / 100);
-            const refund = m.totalSpent * (settings.refundRate / 100);
-            totalPayout += (dividend + refund);
-        });
-
-        const netProfit = grossProfit - totalPayout;
-        const totalExpensesCash = expenses.reduce((sum, e) => sum + e.amount, 0);
-        const availableCashFlow = totalShareCapital + totalSales - totalExpensesCash;
-
-        const topProducts = Object.entries(productSalesCount).map(([id, qty]) => ({ ...products.find(p => p.id === parseInt(id)), soldQty: qty })).sort((a, b) => b.soldQty - a.soldQty).slice(0, 5);
-
-        return (
-            <div className="space-y-6">
-            <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6">
-                <h3 className="text-lg font-bold text-gray-800 mb-6 flex items-center gap-2"><Wallet className="text-indigo-500" /> สรุปผลประกอบการสหกรณ์ (ภาพรวม)</h3>
-                
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4">
-                <div className="bg-orange-50 border border-orange-200 rounded-xl p-5 relative overflow-hidden">
-                    <p className="text-sm text-orange-700 font-bold mb-1 relative z-10">ทุนเรือนหุ้น (เงินต้นจากสมาชิก)</p>
-                    <p className="text-2xl font-black text-orange-800 relative z-10">฿{totalShareCapital.toLocaleString('th-TH', {minimumFractionDigits: 2, maximumFractionDigits: 2})}</p>
-                </div>
-                <div className="bg-blue-50 border border-blue-200 rounded-xl p-5 relative overflow-hidden">
-                    <p className="text-sm text-blue-700 font-bold mb-1 relative z-10">กำไรเบื้องต้น (หักต้นทุนสินค้า)</p>
-                    <p className="text-2xl font-black text-blue-800 relative z-10">฿{grossProfit.toLocaleString('th-TH', {minimumFractionDigits: 2, maximumFractionDigits: 2})}</p>
-                </div>
-                <div className={`border rounded-xl p-5 relative overflow-hidden ${netProfit >= 0 ? 'bg-green-50 border-green-200' : 'bg-red-50 border-red-200'}`}>
-                    <p className={`text-sm font-bold mb-1 relative z-10 ${netProfit >= 0 ? 'text-green-700' : 'text-red-700'}`}>กำไรสุทธิ (หลังหักปันผล/เฉลี่ยคืน)</p>
-                    <p className={`text-3xl font-black relative z-10 ${netProfit >= 0 ? 'text-green-800' : 'text-red-800'}`}>฿{netProfit.toLocaleString('th-TH', {minimumFractionDigits: 2, maximumFractionDigits: 2})}</p>
-                </div>
-                </div>
-
-                <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-4">
-                <div className="bg-gray-50 border border-gray-200 rounded-xl p-4 text-center">
-                    <p className="text-xs text-gray-500 font-bold">ยอดขายทั้งหมด</p>
-                    <p className="text-lg font-black text-gray-800">฿{totalSales.toLocaleString('th-TH')}</p>
-                </div>
-                <div className="bg-gray-50 border border-gray-200 rounded-xl p-4 text-center">
-                    <p className="text-xs text-gray-500 font-bold">รายจ่าย/ซื้อของ/เบิก</p>
-                    <p className="text-lg font-black text-red-600">- ฿{totalExpensesCash.toLocaleString('th-TH')}</p>
-                </div>
-                <div className="bg-purple-50 border border-purple-200 rounded-xl p-4 text-center">
-                    <p className="text-xs text-purple-700 font-bold">เตรียมจ่ายคืนสมาชิก</p>
-                    <p className="text-lg font-black text-purple-800">฿{totalPayout.toLocaleString('th-TH')}</p>
-                </div>
-                <div className="bg-indigo-50 border border-indigo-200 rounded-xl p-4 text-center shadow-inner">
-                    <p className="text-xs text-indigo-700 font-bold">เงินสดหมุนเวียนคงเหลือ</p>
-                    <p className="text-xl font-black text-indigo-800">฿{availableCashFlow.toLocaleString('th-TH')}</p>
-                </div>
-                </div>
-            </div>
-
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-                <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6">
-                <h3 className="text-lg font-bold text-gray-800 mb-4">🏆 สินค้าขายดี 5 อันดับแรก</h3>
-                <div className="space-y-4">
-                    {topProducts.map((p, i) => (
-                    <div key={p.id} className="flex items-center gap-4 p-2 hover:bg-gray-50 rounded-lg">
-                        <div className={`w-8 h-8 rounded-full flex items-center justify-center font-bold text-sm shadow-sm shrink-0 ${i === 0 ? 'bg-yellow-400 text-white' : i === 1 ? 'bg-gray-300 text-gray-700' : i === 2 ? 'bg-orange-300 text-white' : 'bg-blue-50 text-blue-600 border'}`}>{i + 1}</div>
-                        <img src={p.image} className="w-10 h-10 rounded border object-cover shrink-0" />
-                        <div className="flex-1 min-w-0"><h4 className="font-medium text-sm text-gray-800 truncate">{p.name}</h4><p className="text-xs text-gray-500">{p.category}</p></div>
-                        <div className="text-right shrink-0"><p className="font-bold text-green-600 bg-green-50 px-2 py-1 rounded-lg text-sm">{p.soldQty} ชิ้น</p></div>
-                    </div>
-                    ))}
-                    {topProducts.length === 0 && <p className="text-center text-gray-400 py-8">ยังไม่มีข้อมูลการขายในขณะนี้</p>}
-                </div>
-                </div>
-                <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6">
-                <h3 className="text-lg font-bold text-gray-800 mb-4">ประวัติการขายล่าสุด</h3>
-                <div className="space-y-3">
-                    {sales.slice().reverse().map((sale, i) => (
-                    <div key={i} className="p-3 border border-gray-100 rounded-lg flex justify-between items-center hover:bg-gray-50 shadow-sm">
-                        <div><p className="font-bold text-sm text-gray-800 flex items-center gap-2">{sale.id}</p><p className="text-xs text-gray-500 mt-0.5">{sale.date}</p></div>
-                        <div className="text-right"><p className="font-black text-green-600">฿{sale.total.toLocaleString()}</p><p className="text-xs text-gray-500">{sale.items.length} รายการ</p></div>
-                    </div>
-                    ))}
-                    {sales.length === 0 && <p className="text-center text-gray-400 py-8">ยังไม่มีการขายเกิดขึ้นในวันนี้</p>}
-                </div>
-                </div>
-            </div>
-            </div>
-        );
-        }
-
-        function SettingsTab({ settings, setSettings, onSave, logs, addLog }) {
-        const [urlBase, setUrlBase] = useState("");
-        
-        useEffect(() => {
-            setUrlBase(window.location.origin + window.location.pathname);
-        }, []);
-
-        const handleSaveSettings = (e) => {
-            e.preventDefault();
-            onSave(); 
-            addLog('เปลี่ยนการตั้งค่า', `อัปเดตข้อมูลสหกรณ์และอัตราปันผล`);
-            alert('บันทึกการตั้งค่าสำเร็จ');
-        };
-
-        const handleLogoUpload = (e) => {
-            const file = e.target.files[0];
-            if (file) {
-            const reader = new FileReader();
-            reader.onloadend = () => setSettings({ ...settings, coopLogo: reader.result });
-            reader.readAsDataURL(file);
-            }
-        };
-
-        const copyMemberLink = () => {
-            const dummyLink = "https://your-github-username.github.io/coop-system/";
-            alert("คัดลอกลิงก์ให้สมาชิกเรียบร้อยแล้ว: \n\n" + (urlBase || dummyLink));
-        };
-
-        return (
-            <div className="space-y-6">
-            <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6 max-w-4xl">
-                <h3 className="text-lg font-bold text-gray-800 mb-4 flex items-center gap-2"><Settings className="text-gray-500"/> ข้อมูลและตั้งค่าสหกรณ์</h3>
-                <form onSubmit={handleSaveSettings} className="space-y-6">
-                <div className="flex flex-col md:flex-row gap-6 items-start">
-                    <div className="w-32 h-32 border-2 border-dashed border-gray-300 rounded-xl flex items-center justify-center relative overflow-hidden group hover:bg-gray-50 transition shrink-0">
-                        <input type="file" accept="image/*" onChange={handleLogoUpload} className="absolute inset-0 w-full h-full opacity-0 cursor-pointer z-10" title="อัปโหลดโลโก้ใหม่"/>
-                        {settings.coopLogo ? (
-                        <img src={settings.coopLogo} className="w-full h-full object-cover" alt="Logo" />
-                        ) : (
-                        <div className="text-center text-gray-400"><UploadCloud size={24} className="mx-auto mb-1"/><span className="text-xs">อัปโหลดโลโก้</span></div>
-                        )}
-                        <div className="absolute inset-0 bg-black/50 hidden group-hover:flex items-center justify-center text-white text-xs font-bold pointer-events-none">เปลี่ยนรูป</div>
-                    </div>
-                    <div className="flex-1 w-full">
-                        <label className="block text-sm font-bold text-gray-800 mb-1">ชื่อสหกรณ์ / ร้านค้า</label>
-                        <input type="text" value={settings.coopName || ''} onChange={e=>setSettings({...settings, coopName: e.target.value})} className="w-full border-2 border-gray-200 rounded-lg p-3 focus:border-blue-500 outline-none font-bold text-gray-800" placeholder="เช่น สหกรณ์โรงเรียนบ้านนกยูง..." />
-                        <p className="text-xs text-gray-500 mt-2">ข้อมูลส่วนนี้จะถูกแสดงที่เมนูแถบด้านซ้าย ในใบเสร็จ และหน้าตรวจสอบยอดสำหรับสมาชิก</p>
-                    </div>
-                </div>
-
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-6 pt-4 border-t border-gray-100">
-                    <div className="bg-green-50 p-4 rounded-xl border border-green-100">
-                    <label className="block text-sm font-bold text-green-800 mb-2">ราคาต่อหุ้น (บาท)</label>
-                    <p className="text-xs text-green-600 mb-2">มูลค่าของหุ้น 1 หน่วย</p>
-                    <input type="number" value={settings.sharePrice} onChange={e=>setSettings({...settings, sharePrice: Number(e.target.value)})} className="w-full border-2 border-green-200 rounded p-2 focus:border-green-500 outline-none font-bold text-lg text-green-900" />
-                    </div>
-                    <div className="bg-purple-50 p-4 rounded-xl border border-purple-100">
-                    <label className="block text-sm font-bold text-purple-800 mb-2">อัตราปันผลค่าหุ้น (%)</label>
-                    <p className="text-xs text-purple-600 mb-2">ใช้คำนวณ: (หุ้น x ราคา) x อัตรา %</p>
-                    <input type="number" step="0.1" value={settings.dividendRate} onChange={e=>setSettings({...settings, dividendRate: Number(e.target.value)})} className="w-full border-2 border-purple-200 rounded p-2 focus:border-purple-500 outline-none font-bold text-lg text-purple-900" />
-                    </div>
-                    <div className="bg-blue-50 p-4 rounded-xl border border-blue-100">
-                    <label className="block text-sm font-bold text-blue-800 mb-2">อัตราเงินเฉลี่ยคืน (%)</label>
-                    <p className="text-xs text-blue-600 mb-2">ใช้คำนวณ: ยอดซื้อสะสม x อัตรา %</p>
-                    <input type="number" step="0.1" value={settings.refundRate} onChange={e=>setSettings({...settings, refundRate: Number(e.target.value)})} className="w-full border-2 border-blue-200 rounded p-2 focus:border-blue-500 outline-none font-bold text-lg text-blue-900" />
-                    </div>
-                </div>
-                <button type="submit" className="bg-gray-800 text-white px-8 py-3 rounded-lg font-bold hover:bg-gray-900 transition shadow-sm w-full md:w-auto">บันทึกการตั้งค่าทั้งหมด</button>
-                </form>
-            </div>
-
-            <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6 max-w-4xl">
-                <h3 className="text-lg font-bold text-gray-800 mb-4 flex items-center gap-2"><ExternalLink className="text-blue-500"/> ลิงก์ระบบตรวจสอบยอดสำหรับสมาชิก</h3>
-                <p className="text-sm text-gray-600 mb-4">สมาชิกสามารถเข้าสู่เว็บไซต์ระบบได้โดยตรง เมื่อกดปุ่ม <b>สำหรับสมาชิก: ตรวจสอบยอด</b> ในหน้าแรก จะสามารถกรอกรหัสตนเองได้ทันทีโดยไม่ต้องเข้าสู่ระบบด้วยรหัสผ่านแอดมิน</p>
-                <div className="flex gap-2">
-                    <input type="text" readOnly value={urlBase || "กำลังโหลด..."} className="flex-1 bg-gray-50 border border-gray-200 rounded-lg p-3 text-sm text-gray-500 font-mono outline-none" />
-                    <button onClick={copyMemberLink} className="bg-blue-600 text-white px-6 py-2 rounded-lg font-medium hover:bg-blue-700 transition flex-shrink-0">คัดลอกลิงก์เว็บ</button>
-                </div>
-            </div>
-
-            <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6">
-                <h3 className="text-lg font-bold text-gray-800 mb-4 flex items-center gap-2"><History className="text-blue-500"/> ประวัติการใช้งานระบบ (Audit Log)</h3>
-                <div className="overflow-x-auto border rounded-lg">
-                <table className="w-full text-left text-sm min-w-[800px]">
-                    <thead className="bg-gray-50 border-b">
-                    <tr>
-                        <th className="p-3 font-medium">วัน-เวลา</th>
-                        <th className="p-3 font-medium">บัญชีผู้ใช้</th>
-                        <th className="p-3 font-medium">การกระทำ</th>
-                        <th className="p-3 font-medium">รายละเอียด</th>
-                    </tr>
-                    </thead>
-                    <tbody className="divide-y divide-gray-100">
-                    {logs.map(log => (
-                        <tr key={log.id} className="hover:bg-gray-50">
-                        <td className="p-3 text-gray-500 whitespace-nowrap">{log.date}</td>
-                        <td className="p-3 font-medium text-blue-600">{log.user}</td>
-                        <td className="p-3 font-bold text-gray-800">{log.action}</td>
-                        <td className="p-3 text-gray-600">{log.details}</td>
-                        </tr>
-                    ))}
-                    </tbody>
-                </table>
-                </div>
-            </div>
-            </div>
-        );
         }
 
         function UserManagement({ users, setUsers, addLog }) {
